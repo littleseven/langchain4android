@@ -80,6 +80,8 @@ class TagGenerationService : Service() {
         const val ACTION_SCAN_PASS_2 = "com.mamba.picme.tag.SCAN_PASS_2"
         const val ACTION_SCAN_PASS_3 = "com.mamba.picme.tag.SCAN_PASS_3"
         const val ACTION_SCAN_PASS_3_FULL = "com.mamba.picme.tag.SCAN_PASS_3_FULL"
+        const val ACTION_SCAN_PASS_4 = "com.mamba.picme.tag.SCAN_PASS_4"
+        const val ACTION_SCAN_PASS_4_FULL = "com.mamba.picme.tag.SCAN_PASS_4_FULL"
         const val ACTION_REGENERATE_CATEGORIES = "com.mamba.picme.tag.REGENERATE_CATEGORIES"
         const val ACTION_PAUSE = "com.mamba.picme.tag.PAUSE"
         const val ACTION_RESUME = "com.mamba.picme.tag.RESUME"
@@ -101,6 +103,8 @@ class TagGenerationService : Service() {
         fun intentScanPass2(context: Context) = intent(context, ACTION_SCAN_PASS_2)
         fun intentScanPass3(context: Context) = intent(context, ACTION_SCAN_PASS_3)
         fun intentScanPass3Full(context: Context) = intent(context, ACTION_SCAN_PASS_3_FULL)
+        fun intentScanPass4(context: Context) = intent(context, ACTION_SCAN_PASS_4)
+        fun intentScanPass4Full(context: Context) = intent(context, ACTION_SCAN_PASS_4_FULL)
 
         /**
          * 按 TAG 类别 / 时间范围重新生成
@@ -160,6 +164,8 @@ class TagGenerationService : Service() {
                         com.mamba.picme.domain.tag.PipelineStage.FACE_CLUSTER
                     com.mamba.picme.data.local.entity.TagScanPass.QWEN_TAGGING ->
                         com.mamba.picme.domain.tag.PipelineStage.QWEN_TAGGING
+                    com.mamba.picme.data.local.entity.TagScanPass.MOBILE_CLIP_ENCODING ->
+                        com.mamba.picme.domain.tag.PipelineStage.MOBILE_CLIP
                     null ->
                         if (state == ScanSessionState.COMPLETED) {
                             com.mamba.picme.domain.tag.PipelineStage.COMPLETE
@@ -290,6 +296,16 @@ class TagGenerationService : Service() {
                 )
                 ACTION_SCAN_PASS_3_FULL -> orch.schedulePass(
                     com.mamba.picme.data.local.entity.TagScanPass.QWEN_TAGGING,
+                    com.mamba.picme.domain.tag.scan.TagScanQuery(),
+                    com.mamba.picme.domain.tag.scan.ScanMode.FULL
+                )
+                ACTION_SCAN_PASS_4 -> orch.schedulePass(
+                    com.mamba.picme.data.local.entity.TagScanPass.MOBILE_CLIP_ENCODING,
+                    com.mamba.picme.domain.tag.scan.TagScanQuery(),
+                    com.mamba.picme.domain.tag.scan.ScanMode.INCREMENTAL
+                )
+                ACTION_SCAN_PASS_4_FULL -> orch.schedulePass(
+                    com.mamba.picme.data.local.entity.TagScanPass.MOBILE_CLIP_ENCODING,
                     com.mamba.picme.domain.tag.scan.TagScanQuery(),
                     com.mamba.picme.domain.tag.scan.ScanMode.FULL
                 )

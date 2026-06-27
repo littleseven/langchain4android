@@ -115,6 +115,7 @@ enum class PipelineStage {
     FACE_ROI,
     FACE_CLUSTER,
     QWEN_TAGGING,
+    MOBILE_CLIP,
     COMPLETE
 }
 
@@ -128,6 +129,8 @@ enum class PassStage {
     DBSCAN_CLUSTERING,
     /** Pass 3: Qwen 图像理解标签生成 */
     QWEN_TAGGING,
+    /** Pass 4: MobileCLIP 语义编码 */
+    MOBILE_CLIP_ENCODING,
     COMPLETE
 }
 

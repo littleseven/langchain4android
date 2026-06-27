@@ -65,7 +65,8 @@ data class TagScanTaskEntity(
 enum class TagScanPass {
     FACE_DETECTION,
     DBSCAN,
-    QWEN_TAGGING
+    QWEN_TAGGING,
+    MOBILE_CLIP_ENCODING
 }
 
 enum class TagScanTaskStatus {

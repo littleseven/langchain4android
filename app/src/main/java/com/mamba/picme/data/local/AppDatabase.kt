@@ -38,7 +38,7 @@ import com.mamba.picme.data.model.MediaEntity
         MediaLocationEntity::class,
         TagScanTaskEntity::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -64,7 +64,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "picme_database"
                 )
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                 INSTANCE = instance
                 instance
@@ -113,6 +113,25 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL(
                     "ALTER TABLE `media_assets` ADD COLUMN `lastTagScanPasses` TEXT"
                 )
+            }
+        }
+        /**
+         * Migration 3 → 4：新增 media_assets.semantic_embedding 字段
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `media_assets` ADD COLUMN `semanticEmbedding` TEXT"
+                )
+            }
+        }
+
+        /**
+         * Migration 4 → 5：空迁移（修复设备上数据库版本已升到5的问题）
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // 无 schema 变更，仅同步版本号
             }
         }
     }

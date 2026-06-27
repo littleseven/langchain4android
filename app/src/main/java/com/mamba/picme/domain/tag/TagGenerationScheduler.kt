@@ -115,6 +115,7 @@ class TagGenerationScheduler(
             landmarkEngine = InferenceBackendType.MNN
         ))
         val llmEngine = AgentOrchestrator.getInstance(context).getLlmEngine()
+        val mobileClip = MobileClipEngine(context)
         TagGenerationPipeline(
             context = context,
             faceDetector = faceDetector,
@@ -122,7 +123,8 @@ class TagGenerationScheduler(
             faceClusterEngine = faceClusterEngine,
             normalizer = normalizer,
             openClGuardian = openClGuardian,
-            userSettingsRepository = userSettingsRepository
+            userSettingsRepository = userSettingsRepository,
+            mobileClipEngine = mobileClip
         )
     }
 
@@ -136,7 +138,7 @@ class TagGenerationScheduler(
         currentJob = scope.launch {
             try {
                 _isScanning.value = true
-                Log.i(TAG, "=== 3-Pass Hybrid Scan started ===")
+                Log.i(TAG, "=== 4-Pass Hybrid Scan started ===")
 
                 if (!ensureModelLoaded()) {
                     Log.w(TAG, "Model not loaded, aborting")
@@ -266,12 +268,45 @@ class TagGenerationScheduler(
                     }
                 }
 
+                // ═══════════════════════════════════════════════
+                //  Pass 4: MobileCLIP 语义编码
+                // ═══════════════════════════════════════════════
+                val needSemantic = dao.getMediaNeedingSemanticEncoding()
+                val semanticTotal = needSemantic.size
+                Log.i(TAG, "=== Pass 4: MobileCLIP semantic encoding ($semanticTotal media) ===")
+
+                var pass4Processed = 0
+                for (entity in needSemantic) {
+                    if (!isActive) {
+                        Log.i(TAG, "Pass 4 cancelled at $pass4Processed/$semanticTotal")
+                        break
+                    }
+                    if (!guardCheck()) break
+
+                    try {
+                        val embedding = pipeline.stage4MobileClipEncoding(entity.uri, entity.id)
+                        if (embedding != null) {
+                            dao.updateSemanticEmbedding(entity.id, embedding)
+                        }
+
+                        pass4Processed++
+                        val overallProcessed = pass1Processed + pass3Processed + pass4Processed
+                        _progress.value = TagScanProgress(overallProcessed, total, PipelineStage.MOBILE_CLIP)
+                        progressCallback(overallProcessed, total)
+                        delay(getThrottleMs())
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Pass 4 failed for media ${entity.id}: ${e.message}")
+                    }
+                }
+
                 _progress.value = TagScanProgress(total, total, PipelineStage.COMPLETE)
-                Log.i(TAG, "=== 3-Pass Hybrid Scan completed: " +
-                    "P1=$pass1Processed/$total, P3=$pass3Processed/$taggingTotal ===")
+                Log.i(TAG, "=== 4-Pass Hybrid Scan completed: " +
+                    "P1=$pass1Processed/$total, P3=$pass3Processed/$taggingTotal, P4=$pass4Processed/$semanticTotal ===")
             } finally {
                 _isScanning.value = false
                 unloadLlm()
+                // 释放 MobileCLIP 引擎
+                pipeline.releaseMobileClip()
             }
         }
     }
@@ -403,6 +438,7 @@ class TagGenerationScheduler(
 
                 // ── Pass 3: Qwen 标签生成 ────────────────
                 val needTagging = dao.getMediaWithFaceRoiWithoutLabels()
+                var pass3Processed = 0
                 if (needTagging.isNotEmpty()) {
                     val cappedTagging = if (needTagging.size > maxPhotos) {
                         Log.i(TAG, "Incremental Pass 3: capping at $maxPhotos/${needTagging.size} to prevent overheating")
@@ -413,7 +449,6 @@ class TagGenerationScheduler(
                     _progress.value = TagScanProgress(alreadyDone + pass1Processed, allCount, PipelineStage.QWEN_TAGGING)
                     Log.i(TAG, "Incremental Pass 3: ${cappedTagging.size} media need Qwen tagging")
 
-                    var pass3Processed = 0
                     for (entity in cappedTagging) {
                         if (!isActive) break
                         if (!guardCheck()) break
@@ -448,12 +483,41 @@ class TagGenerationScheduler(
                     }
                 }
 
-                val finalDone = alreadyDone + pass1Processed
+                // ── Pass 4: MobileCLIP 语义编码 ────────────────
+                val needSemantic = dao.getMediaNeedingSemanticEncoding()
+                var pass4Processed = 0
+                if (needSemantic.isNotEmpty()) {
+                    _progress.value = TagScanProgress(alreadyDone + pass1Processed + pass3Processed, allCount, PipelineStage.MOBILE_CLIP)
+                    Log.i(TAG, "Incremental Pass 4: ${needSemantic.size} media need semantic encoding")
+
+                    for (entity in needSemantic) {
+                        if (!isActive) break
+                        if (!guardCheck()) break
+
+                        try {
+                            val embedding = pipeline.stage4MobileClipEncoding(entity.uri, entity.id)
+                            if (embedding != null) {
+                                dao.updateSemanticEmbedding(entity.id, embedding)
+                            }
+
+                            pass4Processed++
+                            val current = alreadyDone + pass1Processed + pass3Processed + pass4Processed
+                            _progress.value = TagScanProgress(current, allCount, PipelineStage.MOBILE_CLIP)
+                            progressCallback(current, allCount)
+                            delay(getThrottleMs())
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Incremental Pass 4 failed for media ${entity.id}: ${e.message}")
+                        }
+                    }
+                }
+
+                val finalDone = alreadyDone + pass1Processed + pass3Processed
                 _progress.value = TagScanProgress(finalDone, allCount, PipelineStage.COMPLETE)
-                Log.i(TAG, "Incremental scan completed: P1=$pass1Processed, total=${finalDone}/$allCount")
+                Log.i(TAG, "Incremental scan completed: P1=$pass1Processed, P3=$pass3Processed, P4=$pass4Processed, total=${finalDone}/$allCount")
             } finally {
                 _isScanning.value = false
                 unloadLlm()
+                pipeline.releaseMobileClip()
             }
         }
     }
@@ -1135,6 +1199,25 @@ class TagGenerationScheduler(
             qwenSummary = normalized.summary
         )
         dao.updateLabels(entity.id, unifiedTagToJson(unified))
+
+        delay(getThrottleMs())
+    }
+
+    /**
+     * [原子任务] Pass 4：单张媒体的 MobileCLIP 语义编码
+     */
+    suspend fun executeMobileClipEncoding(mediaId: Long) {
+        val dao = db.mediaDao()
+        val entity = dao.getMediaById(mediaId) ?: return
+
+        val embedding = pipeline.stage4MobileClipEncoding(entity.uri, entity.id)
+
+        // 若任务已被取消，丢弃本次结果
+        currentCoroutineContext().ensureActive()
+
+        if (embedding != null) {
+            dao.updateSemanticEmbedding(entity.id, embedding)
+        }
 
         delay(getThrottleMs())
     }

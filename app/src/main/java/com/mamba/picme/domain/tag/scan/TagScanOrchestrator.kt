@@ -81,6 +81,7 @@ class TagScanOrchestrator(
             TagScanPass.FACE_DETECTION -> "1"
             TagScanPass.DBSCAN -> "2"
             TagScanPass.QWEN_TAGGING -> "3"
+            TagScanPass.MOBILE_CLIP_ENCODING -> "4"
         }
     }
 
@@ -254,6 +255,11 @@ class TagScanOrchestrator(
         if (pass == TagScanPass.QWEN_TAGGING && mode == ScanMode.FULL) {
             // 全量重跑 Pass 3：清空已有标签
             db.mediaDao().resetAllLabels()
+        }
+
+        if (pass == TagScanPass.MOBILE_CLIP_ENCODING && mode == ScanMode.FULL) {
+            // 全量重跑 Pass 4：清空语义 embedding
+            db.mediaDao().resetAllSemanticEmbeddings()
         }
 
         // 手动 Pass 增量：按阶段特征过滤，不受时间窗口限制
@@ -458,6 +464,16 @@ class TagScanOrchestrator(
                     createdAt = System.currentTimeMillis()
                 )
             }
+            TagScanPass.MOBILE_CLIP_ENCODING -> mediaIds.map { mediaId ->
+                TagScanTaskEntity(
+                    sessionId = sessionId,
+                    mediaId = mediaId,
+                    pass = TagScanPass.MOBILE_CLIP_ENCODING,
+                    status = TagScanTaskStatus.PENDING,
+                    priority = 0,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
         }
         db.tagScanTaskDao().insertAll(tasks)
         logInfo(sessionId, "创建 ${tasks.size} 个任务 (pass=$pass)")
@@ -533,6 +549,7 @@ class TagScanOrchestrator(
                 TagScanPass.FACE_DETECTION -> scheduler.executeFaceDetection(task.mediaId)
                 TagScanPass.DBSCAN -> scheduler.executeDbscan()
                 TagScanPass.QWEN_TAGGING -> scheduler.executeQwenTagging(task.mediaId)
+                TagScanPass.MOBILE_CLIP_ENCODING -> scheduler.executeMobileClipEncoding(task.mediaId)
             }
             true
         } catch (e: CancellationException) {
@@ -725,6 +742,7 @@ class TagScanOrchestrator(
         return when (pass) {
             TagScanPass.FACE_DETECTION -> entity.faceRoiResult.isNullOrEmpty()
             TagScanPass.QWEN_TAGGING -> entity.labels.isNullOrEmpty()
+            TagScanPass.MOBILE_CLIP_ENCODING -> entity.semanticEmbedding.isNullOrEmpty()
             TagScanPass.DBSCAN -> false // DBSCAN 是全局任务，不针对单媒体
         }
     }

@@ -26,6 +26,9 @@ data class MediaEntity(
     // 人脸 ROI 检测结果 JSON（Stage 1 产出持久化，用于 Pass 1→Pass 3 断点续扫）
     val faceRoiResult: String? = null,
 
+    // MobileCLIP 语义 embedding（512 维 FloatArray 的 Base64，供语义搜索）
+    val semanticEmbedding: String? = null,
+
     // 最近一次 TAG 扫描成功时间戳（用于增量去重与避重）
     val lastTagScanAt: Long? = null,
 

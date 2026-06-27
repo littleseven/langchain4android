@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 /**
  * TAG 生成精细控制子页面
  *
- * 显示 3-Pass 混合管道的各阶段进度和数据库统计。
+ * 显示 4-Pass 混合管道的各阶段进度和数据库统计。
  * 所有操作通过 TagGenerationService → TagScanOrchestrator 统一管理。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,6 +70,7 @@ fun TagGenerationControlScreen(
     var totalMedia by remember { mutableIntStateOf(0) }
     var withFace by remember { mutableIntStateOf(0) }
     var withLabels by remember { mutableIntStateOf(0) }
+    var withSemantic by remember { mutableIntStateOf(0) }
     var personCount by remember { mutableIntStateOf(0) }
     var embeddingCount by remember { mutableIntStateOf(0) }
     var isModelAvailable by remember { mutableStateOf(false) }
@@ -86,6 +87,7 @@ fun TagGenerationControlScreen(
                 totalMedia = db.mediaDao().getTotalCount()
                 withFace = db.mediaDao().searchByHasFace().size
                 withLabels = db.mediaDao().getTotalCount() - db.mediaDao().getUnlabeledMedia().size
+                withSemantic = db.mediaDao().getMediaWithSemanticEmbedding().size
                 personCount = db.personDao().getAllPersons().size
                 embeddingCount = db.personDao().getAllEmbeddingCount()
                 val modelDir = com.mamba.picme.data.download.ModelPathConfig.getModelDir(context, "picme-face-embedding-mnn")
@@ -146,6 +148,7 @@ fun TagGenerationControlScreen(
                 totalMedia = totalMedia,
                 withFace = withFace,
                 withLabels = withLabels,
+                withSemantic = withSemantic,
                 personCount = personCount,
                 embeddingCount = embeddingCount,
                 isModelAvailable = isModelAvailable
@@ -155,7 +158,7 @@ fun TagGenerationControlScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "3-Pass 混合管道",
+                        "4-Pass 混合管道",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -214,6 +217,26 @@ fun TagGenerationControlScreen(
                             Text("Pass 3: Qwen 图像理解标签", style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 "Qwen3.5-2B → $withLabels / $totalMedia 张",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (withSemantic > 0 || !isScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
+                            null,
+                            modifier = Modifier.size(20.dp),
+                            tint = if (withSemantic > 0 || !isScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Pass 4: MobileCLIP 语义编码", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "MobileCLIP-S0 → $withSemantic / $totalMedia 张",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -366,6 +389,15 @@ fun TagGenerationControlScreen(
                             ) {
                                 Text("Pass 3")
                             }
+                            OutlinedButton(
+                                onClick = {
+                                    refreshStats()
+                                    context.startForegroundService(TagGenerationService.intentScanPass4(context))
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Pass 4")
+                            }
                         }
 
                         Spacer(Modifier.height(8.dp))
@@ -384,6 +416,24 @@ fun TagGenerationControlScreen(
                             Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("Pass 3 重新生成")
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // ── Pass 4 重新生成（清空重编码） ──────────
+                        Button(
+                            onClick = {
+                                refreshStats()
+                                context.startForegroundService(TagGenerationService.intentScanPass4Full(context))
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Pass 4 重新生成")
                         }
 
                         Spacer(Modifier.height(8.dp))
@@ -653,6 +703,7 @@ private fun passDisplayName(pass: TagScanPass?): String = when (pass) {
     TagScanPass.FACE_DETECTION -> "Pass 1: 人脸检测"
     TagScanPass.DBSCAN -> "Pass 2: DBSCAN 聚类"
     TagScanPass.QWEN_TAGGING -> "Pass 3: Qwen 标签"
+    TagScanPass.MOBILE_CLIP_ENCODING -> "Pass 4: MobileCLIP 语义"
     null -> "准备中"
 }
 
@@ -700,6 +751,7 @@ private fun StatsCard(
     totalMedia: Int,
     withFace: Int,
     withLabels: Int,
+    withSemantic: Int,
     personCount: Int,
     embeddingCount: Int,
     isModelAvailable: Boolean
@@ -719,6 +771,7 @@ private fun StatsCard(
                 StatItem("总照片", totalMedia.toString())
                 StatItem("含人脸", withFace.toString())
                 StatItem("有标签", withLabels.toString())
+                StatItem("有语义", withSemantic.toString())
                 StatItem("人物簇", personCount.toString())
             }
             Spacer(Modifier.height(4.dp))

@@ -59,6 +59,22 @@ object ModelPathConfig {
     }
 
     /**
+     * 获取 MobileCLIP 模型目录
+     * @param context Android Context
+     * @return MobileCLIP 模型目录路径
+     */
+    fun getMobileClipModelDir(context: Context): File {
+        return getModelDir(context, MODEL_ID_MOBILECLIP)
+    }
+
+    /**
+     * 检查 MobileCLIP 模型是否完整
+     */
+    fun isMobileClipModelReady(context: Context): Boolean {
+        return validateModelFiles(getMobileClipModelDir(context), MOBILECLIP_MODEL_FILES)
+    }
+
+    /**
      * 验证模型文件完整性
      * @param modelDir 模型目录
      * @param requiredFiles 必需的文件列表
@@ -89,6 +105,7 @@ object ModelPathConfig {
     const val MODEL_ID_LLM = "qwen-1.7b"
     const val MODEL_ID_ASR = "sherpa-onnx-asr-zipformer"
     const val MODEL_ID_KWS = "sherpa-onnx-kws-zipformer-wenetspeech"
+    const val MODEL_ID_MOBILECLIP = "mobileclip-mnn"
 
     // ===== 模型文件列表 =====
 
@@ -124,6 +141,19 @@ object ModelPathConfig {
         "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
         "tokens.txt",
         "keywords.txt"
+    )
+
+    /**
+     * MobileCLIP 模型文件列表
+     */
+    val MOBILECLIP_MODEL_FILES = listOf(
+        "vision_model.mnn",
+        "text_model.mnn",
+        "configuration.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.txt",
+        "merges.txt"
     )
 
     // ===== 模型验证辅助方法 =====
@@ -171,6 +201,19 @@ object ModelPathConfig {
         sb.append("  Exists: ${kwsDir.exists()}\n")
         if (kwsDir.exists()) {
             val missing = getMissingFiles(kwsDir, KWS_MODEL_FILES)
+            sb.append("  Status: ${if (missing.isEmpty()) "✓ Complete" else "✗ Missing ${missing.size} files"}\n")
+            if (missing.isNotEmpty()) {
+                sb.append("  Missing: ${missing.joinToString(", ")}\n")
+            }
+        }
+
+        // MobileCLIP 诊断
+        val mobileClipDir = getMobileClipModelDir(context)
+        sb.append("MobileCLIP Model (${MODEL_ID_MOBILECLIP}):\n")
+        sb.append("  Path: ${mobileClipDir.absolutePath}\n")
+        sb.append("  Exists: ${mobileClipDir.exists()}\n")
+        if (mobileClipDir.exists()) {
+            val missing = getMissingFiles(mobileClipDir, MOBILECLIP_MODEL_FILES)
             sb.append("  Status: ${if (missing.isEmpty()) "✓ Complete" else "✗ Missing ${missing.size} files"}\n")
             if (missing.isNotEmpty()) {
                 sb.append("  Missing: ${missing.joinToString(", ")}\n")

@@ -116,6 +116,19 @@ class LlmModelDownloadManager(context: Context) {
          * 人脸检测 ROI Det500M NCNN 模型文件列表
          */
         private val FACE_DETECTION_ROI_500M_NCNN_FILES = listOf("det_500m.param", "det_500m.bin")
+        
+        /**
+         * MobileCLIP 模型文件列表
+         */
+        private val MOBILECLIP_MODEL_FILES = listOf(
+            "vision_model.mnn",
+            "text_model.mnn",
+            "configuration.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "vocab.txt",
+            "merges.txt"
+        )
 
         /**
          * MNN-LLM 模型可选文件列表（存在则下载，404则跳过）
@@ -478,6 +491,7 @@ fun isModelDownloaded(modelId: String): Boolean {
             modelId == "picme-face-det-500m-ncnn" -> FACE_DETECTION_ROI_500M_NCNN_FILES
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
             modelId == "picme-face-embedding-mnn" -> FACE_EMBEDDING_MNN_FILES
+            modelId == "mobileclip-mnn" -> MOBILECLIP_MODEL_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
         }
@@ -499,6 +513,7 @@ fun isModelDownloaded(modelId: String): Boolean {
             modelId == "picme-face-det-500m-mnn" -> FACE_DETECTION_ROI_500M_MNN_FILES
             modelId == "picme-face-det-500m-ncnn" -> FACE_DETECTION_ROI_500M_NCNN_FILES
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
+            modelId == "mobileclip-mnn" -> MOBILECLIP_MODEL_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
         }

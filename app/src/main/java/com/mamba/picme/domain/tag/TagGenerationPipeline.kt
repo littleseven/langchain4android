@@ -44,7 +44,8 @@ class TagGenerationPipeline(
     private val normalizer: TagNormalizer,
     private val openClGuardian: OpenClGuardian? = null,
     private val userSettingsRepository: UserSettingsRepository? = null,
-    private val promptProvider: TagPromptProvider = DefaultTagPromptProvider()
+    private val promptProvider: TagPromptProvider = DefaultTagPromptProvider(),
+    private val mobileClipEngine: MobileClipEngine? = null
 ) {
 
     companion object {
@@ -254,6 +255,80 @@ class TagGenerationPipeline(
         } finally {
             bitmap.recycle()
         }
+    }
+
+    /**
+     * 释放 MobileCLIP 引擎资源
+     */
+    fun releaseMobileClip() {
+        mobileClipEngine?.release()
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  [Pass 4] MobileCLIP 语义编码
+    // ═══════════════════════════════════════════════════
+
+    /**
+     * [Pass 4] MobileCLIP 语义编码
+     *
+     * 使用 MobileCLIP-S0 生成 512 维 L2 归一化图像 embedding，
+     * 存储为 Base64 字符串供语义搜索使用。
+     *
+     * @param uri 照片 Content URI
+     * @param mediaId 媒体 ID
+     * @return Base64 编码的 embedding 字符串，失败返回 null
+     */
+    suspend fun stage4MobileClipEncoding(
+        uri: String,
+        mediaId: Long
+    ): String? {
+        val engine = mobileClipEngine ?: run {
+            Log.w(TAG, "[Pass 4] MobileClipEngine not available")
+            return null
+        }
+
+        if (!engine.isInitialized) {
+            Log.w(TAG, "[Pass 4] MobileClipEngine not initialized, attempting init")
+            if (!engine.initialize(useGpu = false)) {
+                Log.w(TAG, "[Pass 4] Failed to initialize MobileClipEngine")
+                return null
+            }
+        }
+
+        val bitmap = loadBitmap(uri, MAX_VISION_SIZE)
+        if (bitmap == null) {
+            Log.w(TAG, "[Pass 4] Failed to load bitmap for mediaId=$mediaId")
+            return null
+        }
+
+        return try {
+            val embedding = engine.encodeImage(bitmap)
+            if (embedding == null) {
+                Log.w(TAG, "[Pass 4] encodeImage returned null for mediaId=$mediaId")
+                return null
+            }
+            // 编码为 Base64 字符串存储
+            val base64 = floatArrayToBase64(embedding)
+            Log.d(TAG, "[Pass 4] Encoded embedding for mediaId=$mediaId, dim=${embedding.size}, base64_len=${base64.length}")
+            base64
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /**
+     * 将 FloatArray 编码为 Base64 字符串
+     */
+    private fun floatArrayToBase64(array: FloatArray): String {
+        val bytes = ByteArray(array.size * 4)
+        for (i in array.indices) {
+            val bits = java.lang.Float.floatToRawIntBits(array[i])
+            bytes[i * 4] = (bits shr 24).toByte()
+            bytes[i * 4 + 1] = (bits shr 16).toByte()
+            bytes[i * 4 + 2] = (bits shr 8).toByte()
+            bytes[i * 4 + 3] = bits.toByte()
+        }
+        return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
     }
 
     // ═══════════════════════════════════════════════════
