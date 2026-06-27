@@ -191,6 +191,7 @@ private fun LogOverlayHeader(onClear: () -> Unit, onDismiss: () -> Unit) {
 @Composable
 private fun LogItem(entry: LogEntry) {
     val color = when (entry.level) {
+        LogLevel.VERBOSE -> Color(0xFF9E9E9E)
         LogLevel.DEBUG -> Color.Gray
         LogLevel.INFO -> Color.White
         LogLevel.WARN -> Color(0xFFFFA000)

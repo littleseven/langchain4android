@@ -29,6 +29,10 @@ enum class LogModule(val tagPrefixes: List<String>, val displayName: String) {
     CHAT(
         listOf("ChatViewModel", "ChatScreen", "ChatThreadSidebar", "LocalCommandParser"),
         "Chat"
+    ),
+    SEMANTIC(
+        listOf("MobileClip", "ClipTokenizer", "SemanticSearch"),
+        "Semantic Search"
     );
 
     companion object {
@@ -129,7 +133,8 @@ data class LogModuleConfig(
                 LogModule.ORCHESTRATOR,
                 LogModule.DOWNLOAD,
                 LogModule.SETTINGS,
-                LogModule.CHAT
+                LogModule.CHAT,
+                LogModule.SEMANTIC
                 // FACE_DETECTION 默认关闭，用户可在设置页手动开启
             )
         )

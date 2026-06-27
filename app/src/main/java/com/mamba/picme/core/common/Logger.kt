@@ -28,6 +28,7 @@ data class LogEntry(
  * 日志级别枚举
  */
 enum class LogLevel {
+    VERBOSE,
     DEBUG,
     INFO,
     WARN,
@@ -117,6 +118,22 @@ object Logger {
         if (now - last >= intervalMs) {
             throttleMap[key] = now
             d(tag, message)
+        }
+    }
+
+    /**
+     * Verbose 级别日志（最详细，用于调试追踪）
+     *
+     * @param tag 模块标签（不含 PicMe: 前缀）
+     * @param message 日志内容
+     */
+    fun v(tag: String, message: String) {
+        if (!isLogEnabled(tag)) return
+        logToMemory(LogLevel.VERBOSE, tag, message)
+        if (isAndroidRuntime) {
+            Log.v("$TAG_PREFIX$tag", message)
+        } else {
+            println("[VERBOSE] $TAG_PREFIX$tag: $message")
         }
     }
 
