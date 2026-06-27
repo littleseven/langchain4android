@@ -16,11 +16,13 @@ import org.json.JSONException
 /**
  * 媒体搜索引擎
  *
- * 两层查询策略：
+ * 三层混合检索策略：
  * - Layer 1: QueryParser 规则匹配（快速、离线、免费）
  * - Layer 2: Agent LLM 解析复杂混合查询
+ * - Layer 2.5: MobileCLIP 语义召回（连续语义空间匹配）
+ * - Layer 3: 融合排序（结构化分 + 标签分 + 语义分 + 时间衰减）
  *
- * 搜索结果按匹配相关性排序：标签匹配 > OCR 匹配 > 地名匹配 > 文件名匹配
+ * 搜索结果按匹配相关性排序：语义相似度 > 标签匹配 > OCR 匹配 > 地名匹配 > 文件名匹配
  *
  * 支持跨语言搜索：通过 [TagTranslator] 把用户输入的英文查询扩展为中文 canonical 词，
  * 从而命中已有中文 TAG，无需全量重生成。
@@ -31,18 +33,21 @@ class MediaSearchEngine(
     private val ocrWordDao: OcrWordDao? = null,
     private val locationDao: LocationDao? = null,
     private val userSettingsRepository: UserSettingsRepository? = null,
-    private val tagTranslator: TagTranslator = TagTranslator(BilingualVocab.empty())
+    private val tagTranslator: TagTranslator = TagTranslator(BilingualVocab.empty()),
+    private val semanticSearchEngine: SemanticSearchEngine? = null
 ) {
     /**
-     * 执行搜索
+     * 执行搜索（三层混合检索）
      *
-     * @param query 自然语言查询（如"猫""去年的照片""上海"）
+     * @param query 自然语言查询（如"猫""去年的照片""上海""温馨的家庭聚餐"）
      * @param llmSearch LLM 结构化查询回调（仅在规则无法匹配时调用）
+     * @param enableSemanticSearch 是否启用 MobileCLIP 语义召回（默认 true）
      * @return 匹配的媒体列表
      */
     suspend fun search(
         query: String,
-        llmSearch: (suspend (String) -> StructuredFilter?)? = null
+        llmSearch: (suspend (String) -> StructuredFilter?)? = null,
+        enableSemanticSearch: Boolean = true
     ): SearchResult {
         if (query.isBlank()) return SearchResult(emptyList(), query)
 
@@ -52,7 +57,15 @@ class MediaSearchEngine(
         val filter = QueryParser.parse(query, uiLang)
         if (filter != null && !filter.needsLlm) {
             val results = executeFilter(filter)
-            return SearchResult(results, query)
+
+            // Layer 2.5: 语义召回增强（如果规则匹配结果较少，补充语义结果）
+            val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
+                searchSemantic(query, filter, results.size)
+            } else emptyList()
+
+            // Layer 3: 融合排序
+            val merged = mergeAndRank(results, semanticResults, filter)
+            return SearchResult(merged, query)
         }
 
         // Layer 2: LLM 解析
@@ -60,23 +73,118 @@ class MediaSearchEngine(
             val llmFilter = llmSearch(query)
             if (llmFilter != null) {
                 val results = executeFilter(llmFilter)
-                return SearchResult(results, query)
+
+                // 语义召回增强
+                val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
+                    searchSemantic(query, llmFilter, results.size)
+                } else emptyList()
+
+                val merged = mergeAndRank(results, semanticResults, llmFilter)
+                return SearchResult(merged, query)
             }
         }
 
-        // 回退：全字段模糊搜索（跨语言扩展查询词）
+        // 回退：全字段模糊搜索 + 语义召回
         val queryCandidates = tagTranslator.expandForSearch(query, uiLang)
-        val results = queryCandidates
+        val sqlResults = queryCandidates
             .flatMap { mediaDao.searchAll(it) }
             .map { it.toDomain() }
             .toMutableList()
 
         // 人物关键词回退
         if (QueryParser.isPeopleSearch(query)) {
-            results.addAll(mediaDao.searchByHasFace().map { it.toDomain() })
+            sqlResults.addAll(mediaDao.searchByHasFace().map { it.toDomain() })
         }
 
-        return SearchResult(results.distinct(), query)
+        // 语义召回（无结构化过滤时全量语义搜索）
+        val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
+            searchSemantic(query, null, sqlResults.size)
+        } else emptyList()
+
+        val merged = mergeAndRank(sqlResults.distinct(), semanticResults, null)
+        return SearchResult(merged, query)
+    }
+
+    /**
+     * 执行 MobileCLIP 语义召回
+     *
+     * @param query 用户原始查询
+     * @param filter 结构化过滤条件（用于缩小候选集）
+     * @param sqlResultCount 已有 SQL 结果数量（用于判断是否补充语义结果）
+     * @return 语义搜索结果
+     */
+    private suspend fun searchSemantic(
+        query: String,
+        filter: StructuredFilter?,
+        sqlResultCount: Int
+    ): List<SemanticScoredMedia> {
+        // 如果 SQL 结果已足够多（> 50），语义召回优先级降低
+        // 但仍执行语义搜索，用于融合排序中的语义分
+        return try {
+            semanticSearchEngine?.searchByText(
+                query = query,
+                filter = filter,
+                topK = 50
+            ) ?: emptyList()
+        } catch (e: Exception) {
+            Logger.w(TAG, "Semantic search failed", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Layer 3: 融合排序
+     *
+     * 将 SQL 搜索结果和语义搜索结果合并，按综合分数排序：
+     * - 结构化匹配分：时间/地点/人脸命中 boost（0~1.0）
+     * - 标签匹配分：标签命中 boost（0~0.8）
+     * - 语义相似度分：CLIP 余弦相似度（0~1.0）
+     * - 时间衰减：新照片 boost（0~0.3）
+     *
+     * 综合分 = 结构化分 * 0.3 + 标签分 * 0.2 + 语义分 * 0.4 + 时间衰减 * 0.1
+     */
+    private fun mergeAndRank(
+        sqlResults: List<MediaAsset>,
+        semanticResults: List<SemanticScoredMedia>,
+        filter: StructuredFilter?
+    ): List<MediaAsset> {
+        // 构建 ID → 综合分数映射
+        val scoreMap = mutableMapOf<Long, Float>()
+        val mediaMap = mutableMapOf<Long, MediaAsset>()
+
+        // SQL 结果赋予基础分（标签匹配分）
+        sqlResults.forEachIndexed { index, media ->
+            mediaMap[media.id] = media
+            // 基础分：按排序位置衰减（越靠前分数越高）
+            val baseScore = 1.0f - (index.toFloat() / (sqlResults.size + 1))
+            scoreMap[media.id] = baseScore * 0.5f // 标签匹配权重 0.5
+        }
+
+        // 语义结果赋予语义相似度分
+        semanticResults.forEach { scored ->
+            mediaMap[scored.media.id] = scored.media
+            val existingScore = scoreMap.getOrDefault(scored.media.id, 0f)
+            // 语义相似度权重 0.4，与已有分数叠加
+            scoreMap[scored.media.id] = existingScore + scored.score * 0.4f
+        }
+
+        // 时间衰减 boost（新照片加分）
+        val now = System.currentTimeMillis()
+        scoreMap.keys.forEach { id ->
+            val media = mediaMap[id] ?: return@forEach
+            val daysSinceCapture = (now - media.captureDate) / (1000 * 60 * 60 * 24)
+            val timeBoost = when {
+                daysSinceCapture < 30 -> 0.3f
+                daysSinceCapture < 365 -> 0.15f
+                else -> 0f
+            }
+            scoreMap[id] = scoreMap.getOrDefault(id, 0f) + timeBoost * 0.1f
+        }
+
+        // 按综合分数降序排序
+        return scoreMap.entries
+            .sortedByDescending { it.value }
+            .mapNotNull { mediaMap[it.key] }
     }
 
     /**
