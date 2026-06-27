@@ -8,13 +8,19 @@ import ai.onnxruntime.OnnxTensor
 import com.mamba.picme.sentencepiece.SentencePieceProcessor
 import org.json.JSONObject
 import java.io.File
+import java.nio.FloatBuffer
 import java.nio.LongBuffer
 
 /**
- * OPUS-MT 轻量中英翻译引擎（ONNX Runtime + SentencePiece 后端）
+ * OPUS-MT 轻量中英翻译引擎（ONNX Runtime + SentencePiece 后端，带 KV Cache 优化）
  *
  * 使用 Helsinki-NLP/opus-mt-zh-en 的 ONNX INT8 量化版本，
  * 将中文搜索查询翻译为英文，供 MobileCLIP 语义搜索使用。
+ *
+ * KV Cache 优化策略：
+ * - 第 1 步：使用 decoder_model（无 past），输入完整序列，获取 encoder_hidden_states + present_key_values
+ * - 第 2+ 步：使用 decoder_with_past（有 past），只传最后一个 token + 展开后的 past_key_values
+ * - 交叉注意力 encoder KV 缓存固定复用，自注意力 decoder KV 缓存每步更新
  *
  * 模型文件通过 ModelScope/模型中心下载到 llm_models/opus-mt-zh-en/ 目录。
  * 预期文件列表（来自 ModelScope: budaoshou/OPUS-MT-Zh-En-ONNX-INT8）：
@@ -63,6 +69,15 @@ class OpusMtTranslator(
 
         /** 最大输出长度 */
         private const val MAX_OUTPUT_LENGTH = 64
+
+        /** 注意力头数 */
+        private const val NUM_HEADS = 8
+
+        /** 每个头的维度 */
+        private const val HEAD_DIM = 64
+
+        /** 解码器层数 */
+        private const val NUM_LAYERS = 6
 
         /** 共享的 ONNX Runtime 环境 */
         private val ortEnvironment: OrtEnvironment by lazy {
@@ -223,9 +238,15 @@ class OpusMtTranslator(
     // ===== 内部实现 =====
 
     /**
-     * 核心翻译逻辑：Encoder-Decoder Seq2Seq 推理
+     * 核心翻译逻辑：Encoder-Decoder Seq2Seq 推理（带 KV Cache 优化）
      *
-     * 简化实现：针对短查询优化，使用 greedy decoding
+     * 解码策略：
+     * - 第 1 步：使用 decoder_model（无 past），输入完整序列，输出 logits + present_key_values
+     * - 第 2+ 步：使用 decoder_with_past（有 past），输入单个 token + 展开后的 past_key_values
+     *
+     * KV Cache 结构（6 层 × 2 种注意力 × 2 个 KV 张量 = 24 个输入）：
+     * - past_key_values.{0-5}.decoder.key/value: 自注意力 KV 缓存（每步更新）
+     * - past_key_values.{0-5}.encoder.key/value: 交叉注意力 KV 缓存（第 1 步后固定）
      */
     @Suppress("UNCHECKED_CAST")
     private fun translateInternal(input: String): String {
@@ -239,7 +260,6 @@ class OpusMtTranslator(
         val inputLength = inputIds.size
 
         // 2. 编码器前向（获取 encoder hidden states）
-        // 构建 attention_mask（所有有效 token 位置为 1）
         val attentionMask = LongArray(inputLength) { 1L }
 
         val encoderInputTensor = OnnxTensor.createTensor(
@@ -260,15 +280,25 @@ class OpusMtTranslator(
         val encoderOutputs = enc.run(encoderInputMap)
         val encoderHiddenStates = encoderOutputs[0] as OnnxTensor
 
-        // 3. 解码器贪婪解码
-        // 注意：当前模型不支持 past_key_values 单一输入（需要展开为多个张量），
-        // 因此所有步骤都使用 decoder_model（不带 past），每次传完整序列。
-        // 性能稍差但实现简单且正确。如需优化，需解析并展开 KV 缓存张量。
+        // 3. 解码器贪婪解码（带 KV Cache 优化）
         val outputIds = mutableListOf<Long>(padTokenId.toLong())
 
+        // KV Cache 存储：
+        // - decoderKV: 自注意力 KV 缓存，每步更新（6 层 × 2 个张量）
+        // - encoderKV: 交叉注意力 KV 缓存，第 1 步后固定（6 层 × 2 个张量）
+        var decoderKV: Array<OnnxTensor?> = arrayOfNulls(NUM_LAYERS * 2)
+        var encoderKV: Array<OnnxTensor?> = arrayOfNulls(NUM_LAYERS * 2)
+
         for (step in 0 until MAX_OUTPUT_LENGTH) {
-            // 构建完整输入序列（包含所有已生成的 token）
-            val decoderInputIds = LongArray(outputIds.size) { outputIds[it] }
+            val isFirstStep = step == 0
+            val usePastModel = !isFirstStep && decPast != null
+
+            // 构建 input_ids：第 1 步传完整序列，第 2+ 步只传最后一个 token
+            val decoderInputIds = if (usePastModel) {
+                longArrayOf(outputIds.last())
+            } else {
+                LongArray(outputIds.size) { outputIds[it] }
+            }
 
             val decoderInputTensor = OnnxTensor.createTensor(
                 ortEnvironment,
@@ -276,29 +306,94 @@ class OpusMtTranslator(
                 longArrayOf(1, decoderInputIds.size.toLong())
             )
 
-            // 构建解码器输入：所有步骤都需要 encoder_hidden_states 和 encoder_attention_mask
             val decoderInputs = java.util.HashMap<String, OnnxTensor>()
             decoderInputs["input_ids"] = decoderInputTensor
-            decoderInputs["encoder_hidden_states"] = encoderHiddenStates
             decoderInputs["encoder_attention_mask"] = encoderAttentionMaskTensor
 
-            val decoderOutputs = dec.run(decoderInputs)
+            if (isFirstStep) {
+                // 第 1 步：使用 decoder_model（无 past），需要 encoder_hidden_states
+                decoderInputs["encoder_hidden_states"] = encoderHiddenStates
+            } else if (usePastModel) {
+                // 第 2+ 步：使用 decoder_with_past，传入展开后的 past_key_values
+                // 添加 24 个 KV 缓存张量（6 层 × decoder/encoder × key/value）
+                for (layer in 0 until NUM_LAYERS) {
+                    val decoderK = decoderKV[layer * 2]
+                    val decoderV = decoderKV[layer * 2 + 1]
+                    val encoderK = encoderKV[layer * 2]
+                    val encoderV = encoderKV[layer * 2 + 1]
+
+                    if (decoderK != null && decoderV != null &&
+                        encoderK != null && encoderV != null) {
+                        decoderInputs["past_key_values.$layer.decoder.key"] = decoderK
+                        decoderInputs["past_key_values.$layer.decoder.value"] = decoderV
+                        decoderInputs["past_key_values.$layer.encoder.key"] = encoderK
+                        decoderInputs["past_key_values.$layer.encoder.value"] = encoderV
+                    }
+                }
+            }
+
+            // 选择活跃解码器
+            val activeDecoder = if (usePastModel) decPast else dec
+            val decoderOutputs = activeDecoder!!.run(decoderInputs)
 
             // 获取 logits（第 1 个输出）
             val logitsTensor = decoderOutputs[0]
             val outputValue = logitsTensor.value
             val logits = outputValue as Array<Array<FloatArray>>
 
-            // 取最后一个时间步的 logits，greedy 选择最大概率
+            // 取最后一个时间步的 logits（第 1 步取最后一个位置，第 2+ 步只有 1 个位置）
             val lastLogits = logits[0][decoderInputIds.size - 1]
             val nextTokenId = lastLogits.indices.maxByOrNull { lastLogits[it] } ?: unkTokenId
 
+            // 释放当前步的 logits
             logitsTensor.close()
             decoderInputTensor.close()
+
+            // 更新 KV Cache：从输出中提取 present.*
+            // 输出格式：logits + present.0.decoder.key + present.0.decoder.value + ...
+            // 注意：decoder_with_past 只输出 decoder 的 KV 缓存（present.*），
+            // 不输出 encoder 的 KV 缓存（因为交叉注意力 KV 缓存不变）
+            if (decoderOutputs.size() > 1) {
+                if (isFirstStep) {
+                    // 第 1 步：从 decoder_model 输出中提取所有 KV 缓存
+                    // 输出顺序：logits, present.0.decoder.key, present.0.decoder.value,
+                    //           present.0.encoder.key, present.0.encoder.value, ...
+                    for (layer in 0 until NUM_LAYERS) {
+                        val baseIdx = 1 + layer * 4
+                        if (baseIdx + 3 < decoderOutputs.size()) {
+                            decoderKV[layer * 2] = decoderOutputs[baseIdx] as OnnxTensor      // decoder.key
+                            decoderKV[layer * 2 + 1] = decoderOutputs[baseIdx + 1] as OnnxTensor  // decoder.value
+                            encoderKV[layer * 2] = decoderOutputs[baseIdx + 2] as OnnxTensor      // encoder.key
+                            encoderKV[layer * 2 + 1] = decoderOutputs[baseIdx + 3] as OnnxTensor  // encoder.value
+                        }
+                    }
+                } else if (usePastModel) {
+                    // 第 2+ 步：从 decoder_with_past 输出中只更新 decoder KV 缓存
+                    // 输出顺序：logits, present.0.decoder.key, present.0.decoder.value, ...
+                    // 释放旧的 decoder KV 缓存
+                    for (layer in 0 until NUM_LAYERS) {
+                        decoderKV[layer * 2]?.close()
+                        decoderKV[layer * 2 + 1]?.close()
+
+                        val baseIdx = 1 + layer * 2
+                        if (baseIdx + 1 < decoderOutputs.size()) {
+                            decoderKV[layer * 2] = decoderOutputs[baseIdx] as OnnxTensor      // decoder.key
+                            decoderKV[layer * 2 + 1] = decoderOutputs[baseIdx + 1] as OnnxTensor  // decoder.value
+                        }
+                    }
+                }
+            }
 
             if (nextTokenId == eosTokenId) break
             outputIds.add(nextTokenId.toLong())
         }
+
+        // 释放 KV 缓存
+        for (i in decoderKV.indices) {
+            decoderKV[i]?.close()
+            encoderKV[i]?.close()
+        }
+
         encoderHiddenStates.close()
         encoderAttentionMaskTensor.close()
         encoderInputTensor.close()
