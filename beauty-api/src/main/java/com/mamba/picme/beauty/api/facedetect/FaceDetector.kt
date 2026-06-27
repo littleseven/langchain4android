@@ -1,6 +1,7 @@
 package com.mamba.picme.beauty.api.facedetect
 
 import android.graphics.Bitmap
+import android.graphics.RectF
 
 /**
  * 人脸检测器公开接口
@@ -27,6 +28,17 @@ interface FaceDetector {
      * @return 检测结果，无人脸返回 null
      */
     fun detectPhoto(bitmap: Bitmap, lensFacing: Int): FaceDetectionResult?
+
+    /**
+     * 轻量人脸检测（仅 ROI，无关键点）
+     *
+     * 专为 TAG 生成等不需要关键点对齐的场景设计。
+     * 跳过关键点检测，直接返回人脸 ROI 矩形列表。
+     *
+     * @param bitmap 静态图片 Bitmap
+     * @return 人脸 ROI 列表（像素坐标），无人脸返回空列表
+     */
+    fun detectFacesOnly(bitmap: Bitmap): List<RectF>
 
     /**
      * 切换检测引擎模式

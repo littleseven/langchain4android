@@ -3,13 +3,12 @@ package com.mamba.picme.domain.tag
 import android.graphics.RectF
 
 /**
- * Stage 1 产出：人脸 ROI 检测 + 关键点结果
+ * Stage 1 产出：人脸 ROI 检测结果（轻量版，无关键点）
  */
 data class Stage1Result(
     val hasFace: Boolean,
     val faceCount: Int = 0,
-    val roiRects: List<RectF> = emptyList(),
-    val rawLandmarks: FloatArray = FloatArray(0)
+    val roiRects: List<RectF> = emptyList()
 ) {
     val isSelfie: Boolean get() = faceCount == 1
     val isGroupPhoto: Boolean get() = faceCount >= 3
@@ -20,15 +19,13 @@ data class Stage1Result(
         other as Stage1Result
         return hasFace == other.hasFace &&
                 faceCount == other.faceCount &&
-                roiRects == other.roiRects &&
-                rawLandmarks.contentEquals(other.rawLandmarks)
+                roiRects == other.roiRects
     }
 
     override fun hashCode(): Int {
         var result = hasFace.hashCode()
         result = 31 * result + faceCount
         result = 31 * result + roiRects.hashCode()
-        result = 31 * result + rawLandmarks.contentHashCode()
         return result
     }
 }

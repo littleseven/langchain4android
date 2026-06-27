@@ -158,7 +158,7 @@ fun TagGenerationControlScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "4-Pass 混合管道",
+                        "3-Pass 混合管道",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -173,9 +173,9 @@ fun TagGenerationControlScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Pass 1: 人脸检测 + Embedding", style = MaterialTheme.typography.bodyMedium)
+                            Text("Pass 1: 人脸检测 + MobileCLIP 语义编码", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "InsightFace + MobileFaceNet → $withFace / $totalMedia 张",
+                                "RetinaFace + MobileCLIP-S0 → $withFace / $totalMedia 张",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -217,26 +217,6 @@ fun TagGenerationControlScreen(
                             Text("Pass 3: Qwen 图像理解标签", style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 "Qwen3.5-2B → $withLabels / $totalMedia 张",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (withSemantic > 0 || !isScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
-                            null,
-                            modifier = Modifier.size(20.dp),
-                            tint = if (withSemantic > 0 || !isScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Pass 4: MobileCLIP 语义编码", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "MobileCLIP-S0 → $withSemantic / $totalMedia 张",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -389,15 +369,6 @@ fun TagGenerationControlScreen(
                             ) {
                                 Text("Pass 3")
                             }
-                            OutlinedButton(
-                                onClick = {
-                                    refreshStats()
-                                    context.startForegroundService(TagGenerationService.intentScanPass4(context))
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Pass 4")
-                            }
                         }
 
                         Spacer(Modifier.height(8.dp))
@@ -420,7 +391,7 @@ fun TagGenerationControlScreen(
 
                         Spacer(Modifier.height(8.dp))
 
-                        // ── Pass 4 重新生成（清空重编码） ──────────
+                        // ── 语义编码重新生成（清空重编码） ──────────
                         Button(
                             onClick = {
                                 refreshStats()
@@ -433,7 +404,7 @@ fun TagGenerationControlScreen(
                         ) {
                             Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Pass 4 重新生成")
+                            Text("语义编码重新生成")
                         }
 
                         Spacer(Modifier.height(8.dp))
@@ -700,10 +671,10 @@ private fun ScanProgressCard(progress: TagScanSessionProgress) {
 }
 
 private fun passDisplayName(pass: TagScanPass?): String = when (pass) {
-    TagScanPass.FACE_DETECTION -> "Pass 1: 人脸检测"
+    TagScanPass.FACE_DETECTION -> "Pass 1: 人脸检测 + MobileCLIP"
     TagScanPass.DBSCAN -> "Pass 2: DBSCAN 聚类"
     TagScanPass.QWEN_TAGGING -> "Pass 3: Qwen 标签"
-    TagScanPass.MOBILE_CLIP_ENCODING -> "Pass 4: MobileCLIP 语义"
+    TagScanPass.MOBILE_CLIP_ENCODING -> "语义编码"
     null -> "准备中"
 }
 

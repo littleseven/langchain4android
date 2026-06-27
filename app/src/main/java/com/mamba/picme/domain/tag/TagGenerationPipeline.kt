@@ -27,14 +27,14 @@ import org.json.JSONObject
  * ```
  *
  * 依赖注入：
- * - [faceDetector]：Stage 1 使用，InsightFace Det10G + 2D106
- * - [llmEngine]：Stage 3 使用，Qwen3.5-2B MNN-LLM
- * - [faceClusterEngine]：Stage 2 使用，MobileFaceNet（Phase 2）+ 余弦聚类
- * - [normalizer]：Stage 3 产出后处理规范化
- * - [context]：Android Context，用于 ContentResolver 加载图片
- *
- * **注意**：Stage 2（MobileFaceNet）当前为占位实现，
- * Stage 2b 返回的 embedding 为零向量，聚类结果无效。
+ * - [faceDetector]：Stage 1 使用，RetinaFace Det500M
+ * - [llmEngine]：Stage 3 使用，Qwen3.5-2B MNN
+ * - [faceClusterEngine]：Stage 2 使用，MobileFaceNet + 增量聚类
+ * - [normalizer]：标签后处理规范化
+ * - [openClGuardian]：OpenCL 超时守卫（可选）
+ * - [userSettingsRepository]：用户设置（语言偏好等）
+ * - [promptProvider]：Prompt 生成策略
+ * - [mobileClipEngine]：MobileCLIP 语义编码（可选）
  */
 class TagGenerationPipeline(
     private val context: Context,
@@ -94,8 +94,8 @@ class TagGenerationPipeline(
         val stage2Result: Stage2Result?
 
         try {
-            // ── Stage 1: Face ROI + 关键点检测（复用 faceBitmap）───
-            stage1Result = stage1FaceDetection(faceBitmap, lensFacing)
+            // ── Stage 1: 轻量人脸 ROI 检测（复用 faceBitmap）───
+            stage1Result = stage1FaceDetection(faceBitmap)
             Log.d(TAG, "Stage 1 done: hasFace=${stage1Result.hasFace}, count=${stage1Result.faceCount}")
 
             // ── Stage 2: 人脸聚类（复用同一个 faceBitmap，不再重新解码）───
@@ -161,7 +161,7 @@ class TagGenerationPipeline(
         }
 
         try {
-            val stage1Result = stage1FaceDetection(faceBitmap, lensFacing)
+            val stage1Result = stage1FaceDetection(faceBitmap)
             Log.d(TAG, "[Pass 1] Stage 1 done: hasFace=${stage1Result.hasFace}, count=${stage1Result.faceCount}")
 
             val faceRoiJson = faceRoiToJson(stage1Result)
@@ -170,21 +170,18 @@ class TagGenerationPipeline(
                 return Stage1WithEmbeddingsResult(faceRoiJson, emptyList())
             }
 
-            // 提取每张人脸的 512 维 embedding
+            // 提取每张人脸的 512 维 embedding，过滤零向量
             val embeddings = mutableListOf<FloatArray>()
-            for (i in stage1Result.roiRects.indices) {
-                val roi = stage1Result.roiRects[i]
-                val pointsPerFace = 106 * 2
-                val offset = i * pointsPerFace
-                val faceLandmarks = stage1Result.rawLandmarks.sliceArray(
-                    offset until minOf(offset + pointsPerFace, stage1Result.rawLandmarks.size)
-                )
-
-                val feature = faceClusterEngine.extractFeature(faceBitmap, roi, faceLandmarks)
-                embeddings.add(feature)
+            for (roi in stage1Result.roiRects) {
+                val feature = faceClusterEngine.extractFeature(faceBitmap, roi)
+                if (!isZeroVector(feature)) {
+                    embeddings.add(feature)
+                } else {
+                    Log.w(TAG, "[Pass 1] Zero vector embedding skipped for mediaId=$mediaId, roi=$roi")
+                }
             }
 
-            Log.d(TAG, "[Pass 1] Extracted ${embeddings.size} embeddings for mediaId=$mediaId")
+            Log.d(TAG, "[Pass 1] Extracted ${embeddings.size} valid embeddings for mediaId=$mediaId")
             return Stage1WithEmbeddingsResult(faceRoiJson, embeddings)
         } finally {
             faceBitmap.recycle()
@@ -265,7 +262,7 @@ class TagGenerationPipeline(
     }
 
     // ═══════════════════════════════════════════════════
-    //  [Pass 4] MobileCLIP 语义编码
+    //  [Pass 4] MobileCLIP 语义编码（已提前至 Pass 1 后执行）
     // ═══════════════════════════════════════════════════
 
     /**
@@ -274,13 +271,17 @@ class TagGenerationPipeline(
      * 使用 MobileCLIP-S0 生成 512 维 L2 归一化图像 embedding，
      * 存储为 Base64 字符串供语义搜索使用。
      *
+     * 已优化：支持复用已加载的 Bitmap，避免重复解码。
+     *
      * @param uri 照片 Content URI
      * @param mediaId 媒体 ID
+     * @param reuseBitmap 复用的 Bitmap（如 Pass 1 已加载的 640px Bitmap），null 则重新加载
      * @return Base64 编码的 embedding 字符串，失败返回 null
      */
     suspend fun stage4MobileClipEncoding(
         uri: String,
-        mediaId: Long
+        mediaId: Long,
+        reuseBitmap: Bitmap? = null
     ): String? {
         val engine = mobileClipEngine ?: run {
             Log.w(TAG, "[Pass 4] MobileClipEngine not available")
@@ -295,7 +296,7 @@ class TagGenerationPipeline(
             }
         }
 
-        val bitmap = loadBitmap(uri, MAX_VISION_SIZE)
+        val bitmap = reuseBitmap ?: loadBitmap(uri, MAX_VISION_SIZE)
         if (bitmap == null) {
             Log.w(TAG, "[Pass 4] Failed to load bitmap for mediaId=$mediaId")
             return null
@@ -312,7 +313,10 @@ class TagGenerationPipeline(
             Log.d(TAG, "[Pass 4] Encoded embedding for mediaId=$mediaId, dim=${embedding.size}, base64_len=${base64.length}")
             base64
         } finally {
-            bitmap.recycle()
+            // 仅当 bitmap 是自己加载的才回收，外部传入的不负责回收
+            if (reuseBitmap == null) {
+                bitmap.recycle()
+            }
         }
     }
 
@@ -335,9 +339,21 @@ class TagGenerationPipeline(
     //  JSON 序列化/反序列化辅助
     // ═══════════════════════════════════════════════════
 
-    /** 将 Stage 1 结果序列化为 JSON（用于 DB 持久化） */
-    private fun faceRoiToJson(result: Stage1Result): String {
+    /**
+     * 将 Stage 1 结果序列化为 JSON（用于 DB 持久化）
+     *
+     * 无人脸时返回 null，避免 caller 误将 hasFace 标记为 true。
+     */
+    private fun faceRoiToJson(result: Stage1Result): String? {
+        if (!result.hasFace || result.faceCount == 0) {
+            return null
+        }
         return """{"hasFace":${result.hasFace},"faceCount":${result.faceCount},"isSelfie":${result.isSelfie},"isGroupPhoto":${result.isGroupPhoto}}"""
+    }
+
+    /** 判断 embedding 是否为无效的零向量 */
+    private fun isZeroVector(embedding: FloatArray): Boolean {
+        return embedding.all { it == 0f }
     }
 
     /** 从 JSON 恢复人脸上下文 */
@@ -357,59 +373,26 @@ class TagGenerationPipeline(
     }
 
     // ═══════════════════════════════════════════════════
-    //  原私有方法的访问控制变更为 internal（供 scheduler 直接调用）
+    //  Stage 1: 轻量人脸 ROI 检测（仅 bbox，无关键点）
     // ═══════════════════════════════════════════════════
 
-    // 以下方法已通过 stage1WithEmbeddings / stage3QwenTagging 对外暴露
-    // 保留原 processPhoto 用于 processSingle 单张场景
+    /**
+     * [轻量版] 人脸检测 — 仅使用 RetinaFace 获取 ROI，跳过 106 点关键点检测
+     *
+     * 使用 faceDetector.detectFacesOnly() 替代 detectPhoto()，
+     * 节省 ~20-80ms 的关键点检测时间。
+     */
+    private fun stage1FaceDetection(bitmap: Bitmap): Stage1Result {
+        val roiRects = faceDetector.detectFacesOnly(bitmap)
 
-    // ═══════════════════════════════════════════════════
-    //  Stage 1: Face ROI + 106 关键点检测
-    // ═══════════════════════════════════════════════════
-
-    private suspend fun stage1FaceDetection(bitmap: Bitmap, lensFacing: Int): Stage1Result {
-        val result = faceDetector.detectPhoto(bitmap, lensFacing)
-        if (result == null) {
+        if (roiRects.isEmpty()) {
             return Stage1Result(false)
-        }
-
-        val pointsPerFace = 106 * 2
-        val faceCount = result.landmarks106.size / pointsPerFace
-        val imageWidth = bitmap.width
-        val imageHeight = bitmap.height
-
-        val roiRects = mutableListOf<RectF>()
-        for (faceIdx in 0 until faceCount) {
-            val offset = faceIdx * pointsPerFace
-            val facePoints = result.landmarks106.sliceArray(offset until offset + pointsPerFace)
-
-            var minX = Float.MAX_VALUE
-            var minY = Float.MAX_VALUE
-            var maxX = Float.MIN_VALUE
-            var maxY = Float.MIN_VALUE
-            for (i in 0 until pointsPerFace) {
-                val v = facePoints[i]
-                if (i % 2 == 0) {
-                    if (v < minX) minX = v
-                    if (v > maxX) maxX = v
-                } else {
-                    if (v < minY) minY = v
-                    if (v > maxY) maxY = v
-                }
-            }
-            roiRects.add(RectF(
-                minX * imageWidth,
-                minY * imageHeight,
-                maxX * imageWidth,
-                maxY * imageHeight
-            ))
         }
 
         return Stage1Result(
             hasFace = true,
-            faceCount = faceCount,
-            roiRects = roiRects,
-            rawLandmarks = result.landmarks106.copyOf()
+            faceCount = roiRects.size,
+            roiRects = roiRects
         )
     }
 
@@ -424,15 +407,14 @@ class TagGenerationPipeline(
     ): Stage2Result? {
         val embeddings = mutableListOf<FaceEmbeddingOutput>()
 
-        for (i in stage1Result.roiRects.indices) {
-            val roi = stage1Result.roiRects[i]
-            val pointsPerFace = 106 * 2
-            val offset = i * pointsPerFace
-            val faceLandmarks = stage1Result.rawLandmarks.sliceArray(
-                offset until minOf(offset + pointsPerFace, stage1Result.rawLandmarks.size)
-            )
+        for (roi in stage1Result.roiRects) {
+            val feature = faceClusterEngine.extractFeature(bitmap, roi)
 
-            val feature = faceClusterEngine.extractFeature(bitmap, roi, faceLandmarks)
+            // 过滤零向量，避免误聚类
+            if (isZeroVector(feature)) {
+                Log.w(TAG, "[Stage 2] Zero vector embedding skipped for mediaId=$mediaId, roi=$roi")
+                continue
+            }
 
             val matchedPersonId = faceClusterEngine.matchCluster(feature)
 
@@ -508,10 +490,6 @@ class TagGenerationPipeline(
         }
     }
 
-    // ═══════════════════════════════════════════════════
-    //  JSON 序列化/反序列化（使用 org.json）
-    // ═══════════════════════════════════════════════════
-
     private fun parseQwenResponse(jsonStr: String): QwenTags? {
         return try {
             val obj = JSONObject(jsonStr)
@@ -567,75 +545,51 @@ class TagGenerationPipeline(
      * - 若不存在 Guardian，回退到原始 llmEngine.imageInference
      */
     private suspend fun runVisionInference(bitmap: Bitmap, userPrompt: String): String {
-        val guardian = openClGuardian
-        if (guardian != null) {
-            val result = guardian.inference(
+        return if (openClGuardian != null) {
+            when (val result = openClGuardian.inference(
                 bitmap = bitmap,
                 systemPrompt = stage3SystemPrompt,
                 userPrompt = userPrompt,
                 maxTokens = QWEN_MAX_TOKENS
-            )
-            return when (result) {
+            )) {
                 is OpenClInferenceResult.Success -> result.response
                 is OpenClInferenceResult.Timeout -> {
-                    Log.w(TAG, "OpenCL timeout, falling back to CPU and retry once")
-                    guardian.fallbackToCpu("OpenCL timeout during Pass 3")
-                    val retry = guardian.inference(
-                        bitmap = bitmap,
-                        systemPrompt = stage3SystemPrompt,
-                        userPrompt = userPrompt,
-                        maxTokens = QWEN_MAX_TOKENS
-                    )
-                    when (retry) {
-                        is OpenClInferenceResult.Success -> retry.response
-                        is OpenClInferenceResult.Timeout -> "__ERROR_OPENCL_TIMEOUT__"
-                        is OpenClInferenceResult.Error -> "__ERROR_${retry.message}"
-                    }
+                    Log.w(TAG, "OpenCL timeout, retrying with CPU fallback")
+                    llmEngine.imageInference(bitmap, stage3SystemPrompt, userPrompt, maxTokens = QWEN_MAX_TOKENS)
                 }
-                is OpenClInferenceResult.Error -> "__ERROR_${result.message}"
+                is OpenClInferenceResult.Error -> {
+                    Log.w(TAG, "OpenCL error: ${result.message}, falling back to CPU")
+                    llmEngine.imageInference(bitmap, stage3SystemPrompt, userPrompt, maxTokens = QWEN_MAX_TOKENS)
+                }
             }
+        } else {
+            llmEngine.imageInference(bitmap, stage3SystemPrompt, userPrompt, maxTokens = QWEN_MAX_TOKENS)
         }
-
-        return llmEngine.imageInference(
-            bitmap = bitmap,
-            systemPrompt = stage3SystemPrompt,
-            userPrompt = userPrompt,
-            maxTokens = QWEN_MAX_TOKENS
-        )
     }
 
     /**
-     * 加载并缩放 Bitmap
+     * 从 Content URI 加载 Bitmap，缩放到指定最长边
      */
-    private fun loadBitmap(uriString: String, maxSize: Int): Bitmap? {
+    private fun loadBitmap(uri: String, maxSize: Int): Bitmap? {
         return try {
-            val uri = Uri.parse(uriString)
-            val cr = context.contentResolver
-
-            // 先解码尺寸
-            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
-
-            val rawW = opts.outWidth
-            val rawH = opts.outHeight
-            if (rawW <= 0 || rawH <= 0) return null
-
-            // 计算 sample size
-            var sampleSize = 1
-            while ((rawW / sampleSize) > maxSize || (rawH / sampleSize) > maxSize) {
-                sampleSize *= 2
+            val contentUri = Uri.parse(uri)
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
             }
+            BitmapFactory.decodeStream(context.contentResolver.openInputStream(contentUri), null, options)
 
-            // 实际解码
-            cr.openInputStream(uri)?.use {
-                val decodeOpts = BitmapFactory.Options().apply {
-                    inSampleSize = sampleSize
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
-                }
-                BitmapFactory.decodeStream(it, null, decodeOpts)
+            val scale = if (maxOf(options.outWidth, options.outHeight) > maxSize) {
+                maxOf(options.outWidth, options.outHeight) / maxSize
+            } else 1
+
+            BitmapFactory.Options().apply {
+                inSampleSize = scale
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }.let {
+                BitmapFactory.decodeStream(context.contentResolver.openInputStream(contentUri), null, it)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to load bitmap: $uriString", e)
+            Log.w(TAG, "Failed to load bitmap from $uri: ${e.message}")
             null
         }
     }

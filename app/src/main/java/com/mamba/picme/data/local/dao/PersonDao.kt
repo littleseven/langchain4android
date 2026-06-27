@@ -54,6 +54,9 @@ interface PersonDao {
     @Query("SELECT * FROM face_embeddings WHERE personId IS NULL")
     suspend fun getUnassignedEmbeddings(): List<FaceEmbeddingEntity>
 
+    @Query("SELECT * FROM face_embeddings")
+    suspend fun getAllEmbeddings(): List<FaceEmbeddingEntity>
+
     @Query("UPDATE face_embeddings SET personId = :personId WHERE embeddingId = :embeddingId")
     suspend fun assignEmbedding(embeddingId: Long, personId: Long)
 

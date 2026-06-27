@@ -156,15 +156,17 @@ class TagGenerationScheduler(
                 }
 
                 // ═══════════════════════════════════════════════
-                //  Pass 1: 人脸检测 + Embedding 提取
+                //  Pass 1: 人脸检测 + Embedding 提取 + MobileCLIP 语义编码
                 // ═══════════════════════════════════════════════
                 _progress.value = TagScanProgress(0, total, PipelineStage.FACE_ROI)
-                Log.i(TAG, "=== Pass 1: Face detection + Embedding ===")
+                Log.i(TAG, "=== Pass 1: Face detection + Embedding + MobileCLIP ===")
 
                 // 清理旧 embedding 和 persons，确保 Pass 2 结果正确
                 personDao.clearAllEmbeddings()
                 personDao.clearAllPersons()
                 dao.resetAllFaceIds()
+                // 全量扫描时重置语义 embedding，确保重新编码
+                dao.resetAllSemanticEmbeddings()
 
                 var pass1Processed = 0
                 for (entity in allMedia) {
@@ -182,8 +184,11 @@ class TagGenerationScheduler(
                         )
 
                         // 持久化 faceRoi 结果
+                        // 【关键修复】只有当检测到有效 embedding 时才标记 hasFace=true
+                        // 避免 RetinaFace 误检（非人脸区域）导致照片错误进入人脸分组
+                        val hasValidFace = result.faceRoiJson != null && result.embeddings.isNotEmpty()
                         if (result.faceRoiJson != null) {
-                            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, true)
+                            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, hasValidFace)
                         }
 
                         // 写入 embeddings（personId=null，供 Pass 2 DBSCAN）
@@ -195,6 +200,20 @@ class TagGenerationScheduler(
                                     embedding = floatArrayToByteArray(embedding)
                                 )
                             )
+                        }
+
+                        // 【Pass 4 提前】在同一循环中执行 MobileCLIP 语义编码
+                        // 不依赖 Pass 1 的 Bitmap（尺寸不同），独立加载 512px Bitmap
+                        try {
+                            val semanticEmbedding = pipeline.stage4MobileClipEncoding(
+                                uri = entity.uri,
+                                mediaId = entity.id
+                            )
+                            if (semanticEmbedding != null) {
+                                dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Pass 4 (inline) failed for media ${entity.id}: ${e.message}")
                         }
 
                         pass1Processed++
@@ -268,40 +287,9 @@ class TagGenerationScheduler(
                     }
                 }
 
-                // ═══════════════════════════════════════════════
-                //  Pass 4: MobileCLIP 语义编码
-                // ═══════════════════════════════════════════════
-                val needSemantic = dao.getMediaNeedingSemanticEncoding()
-                val semanticTotal = needSemantic.size
-                Log.i(TAG, "=== Pass 4: MobileCLIP semantic encoding ($semanticTotal media) ===")
-
-                var pass4Processed = 0
-                for (entity in needSemantic) {
-                    if (!isActive) {
-                        Log.i(TAG, "Pass 4 cancelled at $pass4Processed/$semanticTotal")
-                        break
-                    }
-                    if (!guardCheck()) break
-
-                    try {
-                        val embedding = pipeline.stage4MobileClipEncoding(entity.uri, entity.id)
-                        if (embedding != null) {
-                            dao.updateSemanticEmbedding(entity.id, embedding)
-                        }
-
-                        pass4Processed++
-                        val overallProcessed = pass1Processed + pass3Processed + pass4Processed
-                        _progress.value = TagScanProgress(overallProcessed, total, PipelineStage.MOBILE_CLIP)
-                        progressCallback(overallProcessed, total)
-                        delay(getThrottleMs())
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Pass 4 failed for media ${entity.id}: ${e.message}")
-                    }
-                }
-
                 _progress.value = TagScanProgress(total, total, PipelineStage.COMPLETE)
                 Log.i(TAG, "=== 4-Pass Hybrid Scan completed: " +
-                    "P1=$pass1Processed/$total, P3=$pass3Processed/$taggingTotal, P4=$pass4Processed/$semanticTotal ===")
+                    "P1+P4=$pass1Processed/$total, P2=DBSCAN, P3=$pass3Processed/$taggingTotal ===")
             } finally {
                 _isScanning.value = false
                 unloadLlm()
@@ -385,6 +373,7 @@ class TagGenerationScheduler(
                 // ── Pass 1: 未检测 ROI 的媒体 ──────────────
                 val needRoi = unlabeledMedia.filter { dao.getFaceRoiResult(it.id) == null }
                 var pass1Processed = 0
+                var pass4Processed = 0
 
                 if (needRoi.isNotEmpty()) {
                     _progress.value = TagScanProgress(alreadyDone, allCount, PipelineStage.FACE_ROI)
@@ -401,8 +390,10 @@ class TagGenerationScheduler(
                                 mediaId = entity.id
                             )
 
+                            // 【关键修复】只有当检测到有效 embedding 时才标记 hasFace=true
+                            val hasValidFace = result.faceRoiJson != null && result.embeddings.isNotEmpty()
                             if (result.faceRoiJson != null) {
-                                dao.updateFaceRoiResult(entity.id, result.faceRoiJson, true)
+                                dao.updateFaceRoiResult(entity.id, result.faceRoiJson, hasValidFace)
                             }
 
                             for (embedding in result.embeddings) {
@@ -413,6 +404,20 @@ class TagGenerationScheduler(
                                         embedding = floatArrayToByteArray(embedding)
                                     )
                                 )
+                            }
+
+                            // 【Pass 4 提前】同步执行 MobileCLIP 语义编码
+                            try {
+                                val semanticEmbedding = pipeline.stage4MobileClipEncoding(
+                                    uri = entity.uri,
+                                    mediaId = entity.id
+                                )
+                                if (semanticEmbedding != null) {
+                                    dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
+                                }
+                                pass4Processed++
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Incremental Pass 4 (inline) failed for media ${entity.id}: ${e.message}")
                             }
 
                             pass1Processed++
@@ -483,37 +488,9 @@ class TagGenerationScheduler(
                     }
                 }
 
-                // ── Pass 4: MobileCLIP 语义编码 ────────────────
-                val needSemantic = dao.getMediaNeedingSemanticEncoding()
-                var pass4Processed = 0
-                if (needSemantic.isNotEmpty()) {
-                    _progress.value = TagScanProgress(alreadyDone + pass1Processed + pass3Processed, allCount, PipelineStage.MOBILE_CLIP)
-                    Log.i(TAG, "Incremental Pass 4: ${needSemantic.size} media need semantic encoding")
-
-                    for (entity in needSemantic) {
-                        if (!isActive) break
-                        if (!guardCheck()) break
-
-                        try {
-                            val embedding = pipeline.stage4MobileClipEncoding(entity.uri, entity.id)
-                            if (embedding != null) {
-                                dao.updateSemanticEmbedding(entity.id, embedding)
-                            }
-
-                            pass4Processed++
-                            val current = alreadyDone + pass1Processed + pass3Processed + pass4Processed
-                            _progress.value = TagScanProgress(current, allCount, PipelineStage.MOBILE_CLIP)
-                            progressCallback(current, allCount)
-                            delay(getThrottleMs())
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Incremental Pass 4 failed for media ${entity.id}: ${e.message}")
-                        }
-                    }
-                }
-
                 val finalDone = alreadyDone + pass1Processed + pass3Processed
                 _progress.value = TagScanProgress(finalDone, allCount, PipelineStage.COMPLETE)
-                Log.i(TAG, "Incremental scan completed: P1=$pass1Processed, P3=$pass3Processed, P4=$pass4Processed, total=${finalDone}/$allCount")
+                Log.i(TAG, "Incremental scan completed: P1=$pass1Processed, P4=$pass4Processed, P3=$pass3Processed, total=${finalDone}/$allCount")
             } finally {
                 _isScanning.value = false
                 unloadLlm()
@@ -571,8 +548,10 @@ class TagGenerationScheduler(
                             mediaId = entity.id
                         )
 
+                        // 【关键修复】只有当检测到有效 embedding 时才标记 hasFace=true
+                        val hasValidFace = result.faceRoiJson != null && result.embeddings.isNotEmpty()
                         if (result.faceRoiJson != null) {
-                            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, true)
+                            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, hasValidFace)
                         }
                         for (embedding in result.embeddings) {
                             personDao.insertEmbedding(
@@ -906,6 +885,35 @@ class TagGenerationScheduler(
 
         val noiseCount = clusters[-1]?.size ?: 0
         Log.i(TAG, "DBSCAN done: $assignedCount media clustered into ${sorted.size} persons, $noiseCount noise")
+
+        // 【关键修复】校验 hasFace 标记：清理有 hasFace=true 但无有效 embedding 的媒体
+        // 这些媒体可能是之前误检（RetinaFace 误报）或零向量过滤后的残留
+        cleanupInvalidHasFace(dao)
+    }
+
+    /**
+     * 清理无效的 hasFace 标记
+     *
+     * 对 hasFace=true 但 face_embeddings 表中没有对应记录的照片，
+     * 重置 hasFace=false 并清除 faceRoiResult，避免误检照片进入人脸分组。
+     */
+    private suspend fun cleanupInvalidHasFace(dao: com.mamba.picme.data.local.MediaDao) {
+        val allHasFace = dao.searchByHasFace()
+        val mediaWithEmbeddings = personDao.getAllEmbeddings().map { it.mediaId }.toSet()
+
+        var cleanedCount = 0
+        for (media in allHasFace) {
+            if (media.id !in mediaWithEmbeddings) {
+                // 无有效 embedding：重置 hasFace 并清除 faceRoiResult
+                dao.updateFaceRoiResult(media.id, "", false)
+                cleanedCount++
+                Log.w(TAG, "Cleanup invalid hasFace: mediaId=${media.id} has no valid embedding, reset hasFace=false")
+            }
+        }
+
+        if (cleanedCount > 0) {
+            Log.w(TAG, "Cleanup invalid hasFace: $cleanedCount media reset from hasFace=true to false")
+        }
     }
 
     /**
@@ -1150,8 +1158,10 @@ class TagGenerationScheduler(
         // 若任务已被取消，丢弃本次结果，避免取消后仍写入数据库
         currentCoroutineContext().ensureActive()
 
+        // 【关键修复】只有当检测到有效 embedding 时才标记 hasFace=true
+        val hasValidFace = result.faceRoiJson != null && result.embeddings.isNotEmpty()
         if (result.faceRoiJson != null) {
-            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, true)
+            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, hasValidFace)
         }
 
         for (embedding in result.embeddings) {

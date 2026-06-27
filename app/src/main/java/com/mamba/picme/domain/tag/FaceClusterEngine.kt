@@ -70,13 +70,11 @@ class FaceClusterEngine(private val context: Context) {
      *
      * @param bitmap 原始图片
      * @param roi 人脸 ROI 区域（像素坐标）
-     * @param landmarks106 Stage 1 输出的 106 点归一化坐标（当前未用于对齐，保留接口兼容性）
      * @return 512 维特征向量（L2 归一化后的真实 embedding，或零向量）
      */
     suspend fun extractFeature(
         bitmap: Bitmap,
-        roi: RectF,
-        landmarks106: FloatArray
+        roi: RectF
     ): FloatArray {
         val extractor = embeddingExtractor
         if (extractor == null) {

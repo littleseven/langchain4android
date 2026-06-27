@@ -148,6 +148,62 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     }
 
     /**
+     * [轻量检测] 仅返回人脸 ROI，不执行关键点检测
+     *
+     * 专为 TAG 生成等场景设计，跳过 landmark 模型以节省 ~20-80ms。
+     * 直接使用 ROI 检测器（RetinaFace Det500M），返回像素坐标矩形。
+     */
+    override fun detectFacesOnly(bitmap: Bitmap): List<RectF> {
+        if (!isPipelineInitialized) {
+            Logger.w(TAG, "detectFacesOnly: Pipeline not initialized")
+            return emptyList()
+        }
+
+        val startTime = SystemClock.elapsedRealtime()
+
+        return try {
+            synchronized(lock) {
+                val roiList = mutableListOf<RectF>()
+                val config = pipelineConfig ?: return emptyList()
+
+                // 使用 ROI 检测器获取所有人脸 bbox
+                when (config.roiEngine) {
+                    InferenceBackendType.MNN -> {
+                        val mnnRoi = roiDetector as? MnnRoiDetector
+                        if (mnnRoi != null) {
+                            // MnnRoiDetector 当前只返回单个人脸，需要扩展支持多脸
+                            // 临时方案：复用 detectRoi 的单脸结果
+                            mnnRoi.detectRoi(bitmap)?.let { roiList.add(it) }
+                        }
+                    }
+                    InferenceBackendType.NCNN -> {
+                        val ncnnRoi = roiDetector as? NcnnRoiDetector
+                        ncnnRoi?.detectRoi(bitmap)?.let { roiList.add(it) }
+                    }
+                    else -> {
+                        // ONNX / TFLite 路径：回退到完整 detectPhoto 提取 ROI
+                        Logger.w(TAG, "detectFacesOnly: fallback to detectPhoto for ${config.roiEngine}")
+                        val result = detectPhoto(bitmap, CameraCharacteristics.LENS_FACING_BACK)
+                        result?.roiRect?.let {
+                            val w = bitmap.width.toFloat()
+                            val h = bitmap.height.toFloat()
+                            roiList.add(RectF(it.left * w, it.top * h, it.right * w, it.bottom * h))
+                        }
+                    }
+                }
+
+                lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+                Logger.d(TAG, "[Perf] detectFacesOnly: ${roiList.size} faces, ${lastProcessTimeMs}ms")
+                roiList
+            }
+        } catch (e: Exception) {
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            Logger.e(TAG, "detectFacesOnly failed", e)
+            emptyList()
+        }
+    }
+
+    /**
      * [Zero-Copy] 人脸 ROI 检测——直接从 YUV NV21 输入
      *
      * 支持 MNN 和 NCNN ROI 检测器的 NV21 直传路径。
@@ -159,7 +215,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
      * @param height 原始图像高度
      * @return ROI 矩形（原图坐标），或 null
      */
-     fun detectRoiFromNv21(nv21Data: ByteBuffer, width: Int, height: Int, rotationDegrees: Int = 0): RectF? {
+    fun detectRoiFromNv21(nv21Data: ByteBuffer, width: Int, height: Int, rotationDegrees: Int = 0): RectF? {
         if (!isPipelineInitialized) {
             Logger.w(TAG, "Pipeline not initialized, skipping NV21 detection")
             return null
@@ -346,7 +402,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         val rotatedWidth = if (needSwap) nv21Height else nv21Width
         val rotatedHeight = if (needSwap) nv21Width else nv21Height
 
-        // ROI 坐标在“旋转后坐标系”中，需按旋转后尺寸做 clamp。
+        // ROI 坐标在"旋转后坐标系"中，需按旋转后尺寸做 clamp。
         val roiLeft = maxOf(0, roi.left.toInt())
         val roiTop = maxOf(0, roi.top.toInt())
         val roiRight = minOf(rotatedWidth, roi.right.toInt())
@@ -396,7 +452,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 detectionSource = detectionSource,
                 roiRect = normalizedRoi,
                 roiDetectorName = "${config.roiEngine.name}(NV21)",
-                useGpuForRoi = config.roiEngine == InferenceBackendType.MNN,
+                useGpuForRoi = true,
                 landmarkDetectorName = "${config.landmarkEngine.name}(NV21-GPU)",
                 useGpuForLandmark = true
             )
