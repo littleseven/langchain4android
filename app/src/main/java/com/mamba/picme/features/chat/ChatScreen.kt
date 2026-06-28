@@ -55,7 +55,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.ChatBubble
-import androidx.compose.material.icons.rounded.ClearAll
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
@@ -337,7 +337,7 @@ private fun ChatTopBar(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IconButton(onClick = onClearChat, modifier = Modifier.size(36.dp)) {
                 Icon(
-                    imageVector = Icons.Rounded.ClearAll,
+                    imageVector = Icons.Rounded.DeleteSweep,
                     contentDescription = stringResource(R.string.clear_chat),
                     modifier = Modifier.size(22.dp)
                 )

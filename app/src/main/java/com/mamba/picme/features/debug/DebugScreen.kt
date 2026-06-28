@@ -69,8 +69,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun DebugScreen(
     onNavigateBack: () -> Unit,
-    mediaViewModel: MediaViewModel,
-    onNavigateToSentencePieceTest: () -> Unit = {}
+    mediaViewModel: MediaViewModel
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -89,7 +88,6 @@ fun DebugScreen(
         progress = progress,
         logs = logs,
         onNavigateBack = onNavigateBack,
-        onNavigateToSentencePieceTest = onNavigateToSentencePieceTest,
         onPauseResume = {
             if (isPaused) {
                 SampleDataGenerator.resume()
@@ -142,7 +140,6 @@ private fun DebugContent(
     progress: String,
     logs: List<String>,
     onNavigateBack: () -> Unit,
-    onNavigateToSentencePieceTest: () -> Unit = {},
     onPauseResume: () -> Unit,
     onStop: () -> Unit,
     onPopulatePerson: () -> Unit,
@@ -223,23 +220,6 @@ private fun DebugContent(
                 Icon(Icons.Default.Save, null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.screenshot))
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 4.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-
-            Text(
-                "SentencePiece 测试",
-                style = MaterialTheme.typography.titleSmall
-            )
-
-            Button(
-                onClick = onNavigateToSentencePieceTest,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("打开 SentencePiece 测试")
             }
 
             HorizontalDivider(

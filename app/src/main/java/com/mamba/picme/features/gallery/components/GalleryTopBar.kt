@@ -8,6 +8,8 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Sell
 import androidx.compose.material.icons.rounded.SelectAll
@@ -53,7 +55,9 @@ fun GalleryTopBar(
     onGroupingModeSelected: (GroupingMode) -> Unit,
     onManageDuplicates: () -> Unit,
     onSearchClick: () -> Unit = {},
-    onTagScanClick: () -> Unit = {}
+    onTagScanClick: () -> Unit = {},
+    onNavigateToTagControl: () -> Unit = {},
+    onToggleScan: () -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -89,11 +93,21 @@ fun GalleryTopBar(
                 }
             } else {
                 val isScanning by TagGenerationService.isScanning.collectAsState(false)
-                IconButton(onClick = onTagScanClick) {
+                val iconTint = if (isScanning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                // TAG 控制入口：点击进入 TagGenerationControlScreen
+                IconButton(onClick = onNavigateToTagControl) {
                     Icon(
                         Icons.Rounded.Sell,
-                        contentDescription = "TAG 扫描",
-                        tint = if (isScanning) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
+                        contentDescription = "TAG 扫描控制",
+                        tint = iconTint
+                    )
+                }
+                // 播放/暂停开关
+                IconButton(onClick = onToggleScan) {
+                    Icon(
+                        imageVector = if (isScanning) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = if (isScanning) "暂停扫描" else "开始扫描",
+                        tint = iconTint
                     )
                 }
                 IconButton(onClick = onManageDuplicates) {

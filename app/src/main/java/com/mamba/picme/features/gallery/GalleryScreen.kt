@@ -94,7 +94,8 @@ fun GalleryScreen(
     onNavigateBack: () -> Unit,
     onNavigateToCamera: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToDebug: () -> Unit
+    onNavigateToDebug: () -> Unit,
+    onNavigateToTagControl: () -> Unit = {}
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
@@ -440,6 +441,14 @@ fun GalleryScreen(
                         },
                         onTagScanClick = {
                             context.startForegroundService(TagGenerationService.intentScanIncremental(context))
+                        },
+                        onNavigateToTagControl = onNavigateToTagControl,
+                        onToggleScan = {
+                            if (TagGenerationService.isScanning.value) {
+                                context.startForegroundService(TagGenerationService.intentPause(context))
+                            } else {
+                                context.startForegroundService(TagGenerationService.intentScanIncremental(context))
+                            }
                         }
                     )
                 }

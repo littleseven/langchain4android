@@ -87,6 +87,8 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToModelCenter: (String) -> Unit = {},
     onNavigateToTagControl: () -> Unit = {},
+    onNavigateToDebug: () -> Unit = {},
+    onNavigateToSearchTest: () -> Unit = {}
 ) {
     val view = LocalView.current
     val context = LocalContext.current
@@ -276,7 +278,9 @@ fun SettingsScreen(
             onFeishuAppIdChange = viewModel::setFeishuAppId,
             onFeishuAppSecretChange = viewModel::setFeishuAppSecret,
             onNavigateBack = onNavigateBack,
-            onNavigateToTagControl = onNavigateToTagControl
+            onNavigateToTagControl = onNavigateToTagControl,
+            onNavigateToDebug = onNavigateToDebug,
+            onNavigateToSearchTest = onNavigateToSearchTest
         )
 
         SettingsAgentPanel(
@@ -351,7 +355,9 @@ private fun SettingsContent(
     onFeishuAppIdChange: (String) -> Unit,
     onFeishuAppSecretChange: (String) -> Unit,
     onNavigateBack: () -> Unit,
-    onNavigateToTagControl: () -> Unit = {}
+    onNavigateToTagControl: () -> Unit = {},
+    onNavigateToDebug: () -> Unit = {},
+    onNavigateToSearchTest: () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -521,14 +527,26 @@ private fun SettingsContent(
                 }
             }
 
-            // ── 4. 相册与标签 ─────────────────────────────────────
+            // ── 4. 相册调试功能 ─────────────────────────────────────
             SettingsSection(
-                title = stringResource(R.string.tag_gen_notification_title),
-                description = "相册标签扫描与重新生成"
+                title = "相册调试功能",
+                description = "测试工具与后端模式切换"
             ) {
-                TagControlEntry(onClick = onNavigateToTagControl)
+                SettingsClickableRow(
+                    title = "图片下载页",
+                    subtitle = "测试数据生成与图片下载",
+                    valueText = "进入",
+                    onClick = onNavigateToDebug
+                )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                SettingsClickableRow(
+                    title = "搜索测试页",
+                    subtitle = "TAG语义搜索功能测试",
+                    valueText = "进入",
+                    onClick = onNavigateToSearchTest
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OpenClBackendSelection(
                     useOpencl = tagGenerationUseOpencl,
@@ -1035,7 +1053,9 @@ fun SettingsScreenPreview() {
             feishuAppSecret = "",
             onFeishuAppIdChange = {},
             onFeishuAppSecretChange = {},
-            onNavigateBack = {}
+            onNavigateBack = {},
+            onNavigateToDebug = {},
+            onNavigateToSearchTest = {}
         )
     }
 }

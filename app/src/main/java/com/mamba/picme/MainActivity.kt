@@ -46,7 +46,7 @@ import com.mamba.picme.features.chat.ChatScreen
 import com.mamba.picme.features.chat.ChatViewModel
 import com.mamba.picme.features.debug.DebugScreen
 import com.mamba.picme.features.gallery.GalleryScreen
-import com.mamba.picme.features.translation.SentencePieceTestScreen
+import com.mamba.picme.features.search.SearchTestScreen
 import com.mamba.picme.features.gallery.MediaViewModel
 import com.mamba.picme.features.gallery.components.TagGenerationControlScreen
 import com.mamba.picme.features.settings.ModelCenterScreen
@@ -232,7 +232,8 @@ class MainActivity : ComponentActivity() {
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToCamera = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) },
-                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true }) }
+                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToTagControl = { navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true }) }
                                 )
                             }
                             composable(Screen.TagControl.route) {
@@ -262,6 +263,12 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onNavigateToTagControl = {
                                         navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToDebug = {
+                                        navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToSearchTest = {
+                                        navController.navigate(Screen.SentencePieceTest.route, navOptions { launchSingleTop = true })
                                     }
                                 )
                             }
@@ -298,12 +305,11 @@ class MainActivity : ComponentActivity() {
                                 }
                                 DebugScreen(
                                     onNavigateBack = { navController.popBackStack() },
-                                    mediaViewModel = mediaViewModel,
-                                    onNavigateToSentencePieceTest = { navController.navigate(Screen.SentencePieceTest.route, navOptions { launchSingleTop = true }) }
+                                    mediaViewModel = mediaViewModel
                                 )
                             }
                             composable(Screen.SentencePieceTest.route) {
-                                SentencePieceTestScreen(
+                                SearchTestScreen(
                                     onNavigateBack = { navController.popBackStack() }
                                 )
                             }
