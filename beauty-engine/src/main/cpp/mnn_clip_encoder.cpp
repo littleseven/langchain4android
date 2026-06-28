@@ -224,12 +224,22 @@ std::vector<float> MobileClipEncoder::encodeText(const int64_t *tokenIds, int to
         return {};
     }
 
+    // MNN 动态维度模型需要先 resize 输入张量
+    // text 模型输入 shape: [batch=1, seq_len=77]
+    std::vector<int> inputShape = {1, MAX_TEXT_TOKENS};
+    textInterpreter_->resizeTensor(textInputTensor_, inputShape);
+    textInterpreter_->resizeSession(textSession_);
+
+    // 重新获取 resize 后的输入/输出张量
+    textInputTensor_ = textInterpreter_->getSessionInput(textSession_, nullptr);
+    textOutputTensor_ = textInterpreter_->getSessionOutput(textSession_, nullptr);
+
     // 创建临时输入张量
     MNN::Tensor::DimensionType inputDimType = textInputTensor_->getDimensionType();
     MNN::Tensor tmpInput(textInputTensor_, inputDimType);
 
-    // 填充 token IDs（int64 -> int64_t）
-    int64_t *inputData = tmpInput.host<int64_t>();
+    // MNN 模型输入类型为 int32，需将 int64 token IDs 转换为 int32
+    int32_t *inputData = tmpInput.host<int32_t>();
     int inputSize = tmpInput.elementSize();
 
     // 先填充 0（padding）
@@ -237,22 +247,43 @@ std::vector<float> MobileClipEncoder::encodeText(const int64_t *tokenIds, int to
         inputData[i] = 0;
     }
 
-    // 复制实际 token IDs
+    // 复制实际 token IDs（int64 -> int32）
     int copyCount = std::min(tokenCount, inputSize);
     for (int i = 0; i < copyCount; i++) {
-        inputData[i] = tokenIds[i];
+        inputData[i] = static_cast<int32_t>(tokenIds[i]);
     }
 
     // 复制到 session 输入张量
     textInputTensor_->copyFromHostTensor(&tmpInput);
 
+    // 调试：打印输入张量信息
+    LOGD("Text input: dims=%d, elementSize=%d, type=%d",
+         textInputTensor_->dimensions(),
+         textInputTensor_->elementSize(),
+         (int)textInputTensor_->getType().code);
+    for (int i = 0; i < textInputTensor_->dimensions(); i++) {
+        LOGD("Text input dim[%d]=%d", i, textInputTensor_->length(i));
+    }
+
     // 运行推理
-    textInterpreter_->runSession(textSession_);
+    auto errorCode = textInterpreter_->runSession(textSession_);
+    if (errorCode != MNN::NO_ERROR) {
+        LOGE("Text runSession failed: %d", errorCode);
+    }
 
     // 获取输出
     MNN::Tensor::DimensionType outputDimType = textOutputTensor_->getDimensionType();
     MNN::Tensor tmpOutput(textOutputTensor_, outputDimType);
     textOutputTensor_->copyToHostTensor(&tmpOutput);
+
+    // 调试：打印输出张量信息
+    LOGD("Text output: dims=%d, elementSize=%d, type=%d",
+         tmpOutput.dimensions(),
+         tmpOutput.elementSize(),
+         (int)tmpOutput.getType().code);
+    for (int i = 0; i < tmpOutput.dimensions(); i++) {
+        LOGD("Text output dim[%d]=%d", i, tmpOutput.length(i));
+    }
 
     float *outputData = tmpOutput.host<float>();
     int outputSize = tmpOutput.elementSize();
