@@ -23,6 +23,10 @@
 # Keep Logger class for reflection binding from beauty-engine module
 -keep class com.mamba.picme.core.common.Logger { public *; }
 
+# ONNX Runtime: 保留所有 ONNX Runtime Java 类，防止 R8 裁剪导致 SIGSEGV
+# 参考：https://github.com/microsoft/onnxruntime/issues/17847
+-keep class ai.onnxruntime.** { *; }
+
 # R8: javax.lang.model 仅在编译期注解处理时需要，运行时不存在
 -dontwarn javax.lang.model.SourceVersion
 -dontwarn javax.lang.model.element.Element

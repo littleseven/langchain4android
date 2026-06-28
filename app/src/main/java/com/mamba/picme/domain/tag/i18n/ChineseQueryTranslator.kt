@@ -103,8 +103,8 @@ class ChineseQueryTranslator(
      * 2. 分词后逐词匹配（如 "公园 猫" → "park cat"）
      */
     private fun tryVocabLookup(query: String): String? {
-        // 1. 整句精确匹配
-        vocab.zhToEn[query]?.let { return it }
+        // 1. 整句精确匹配（忽略空字符串值，空字符串表示该词的翻译缺失）
+        vocab.zhToEn[query]?.takeIf { it.isNotEmpty() }?.let { return it }
 
         // 2. 分词后逐词匹配
         val words = segmentQuery(query)
@@ -112,13 +112,19 @@ class ChineseQueryTranslator(
             when {
                 word in STOP_WORDS -> null  // 跳过停用词
                 !containsChinese(word) -> word  // 保留英文词
-                else -> vocab.zhToEn[word]
+                else -> vocab.zhToEn[word]  // 查词表（可能为 null）
             }
         }
 
         // 如果所有词都命中词表，返回组合结果
-        return if (translatedWords.all { it != null || words[translatedWords.indexOf(it)] in STOP_WORDS }) {
-            translatedWords.filterNotNull().joinToString(" ")
+        // 注意：使用 withIndex() 而非 indexOf()，因为 indexOf(null) 在有多个 null
+        // 时总返回第一个 null 的位置，导致停用词检查错位
+        val allMatched = translatedWords.withIndex().all { (i, translated) ->
+            translated != null || words[i] in STOP_WORDS
+        }
+        return if (allMatched) {
+            val result = translatedWords.filterNotNull().joinToString(" ")
+            result.ifEmpty { null }  // 全是停用词/未命中 → 回退到模型翻译
         } else {
             null
         }
