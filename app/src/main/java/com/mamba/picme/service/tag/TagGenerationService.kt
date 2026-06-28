@@ -282,7 +282,7 @@ class TagGenerationService : Service() {
                 ACTION_SCAN_PASS_1 -> orch.schedulePass(
                     com.mamba.picme.data.local.entity.TagScanPass.FACE_DETECTION,
                     com.mamba.picme.domain.tag.scan.TagScanQuery(),
-                    com.mamba.picme.domain.tag.scan.ScanMode.FULL
+                    com.mamba.picme.domain.tag.scan.ScanMode.INCREMENTAL
                 )
                 ACTION_SCAN_PASS_2 -> orch.schedulePass(
                     com.mamba.picme.data.local.entity.TagScanPass.DBSCAN,

@@ -212,22 +212,39 @@ fun GalleryScreen(
         }
     }
 
-    // AI 图片标签增量扫描 — 在媒体加载完成后触发
-    // 通过 TagGenerationService 统一管理，每次仅触发一次增量扫描
-    // 仅在充电状态下自动触发，避免非充电时耗电发烫
+    // AI 图片标签自动扫描 —— 仅在首次安装、夜间或充电时触发
+    // 避免高频自动扫描导致耗电发烫，用户可通过顶部按钮手动触发
     LaunchedEffect(allFlatMedia.size) {
         if (hasMediaPermission && allFlatMedia.isNotEmpty()
             && !TagGenerationService.isScanning.value) {
-            val isCharging = try {
-                val batteryIntent = context.registerReceiver(
+            val isFirstLaunch = try {
+                val prefs = context.getSharedPreferences("picme_tag_scan", android.content.Context.MODE_PRIVATE)
+                val hasScanned = prefs.getBoolean("has_auto_scanned", false)
+                if (!hasScanned) {
+                    prefs.edit().putBoolean("has_auto_scanned", true).apply()
+                    true
+                } else false
+            } catch (_: Exception) { false }
+
+            val batteryIntent = try {
+                context.registerReceiver(
                     null,
                     android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
                 )
+            } catch (_: Exception) { null }
+
+            val isCharging = try {
                 val status = batteryIntent?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
                 status == android.os.BatteryManager.BATTERY_STATUS_CHARGING
                         || status == android.os.BatteryManager.BATTERY_STATUS_FULL
             } catch (_: Exception) { false }
-            if (isCharging) {
+
+            val isNightTime = try {
+                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                hour in 0..6 || hour >= 23
+            } catch (_: Exception) { false }
+
+            if (isFirstLaunch || (isCharging && isNightTime)) {
                 context.startForegroundService(TagGenerationService.intentScanIncremental(context))
             }
         }
@@ -417,11 +434,13 @@ fun GalleryScreen(
                         },
                         onGroupingModeSelected = { mode -> viewModel.setGroupingMode(mode) },
                         onManageDuplicates = { viewModel.toggleDuplicateManager(true) },
-                        onOpenTestDataTools = onNavigateToDebug,
                         onSearchClick = {
                             isSearchActive = true
                             searchResultMedia = emptyList()
                         },
+                        onTagScanClick = {
+                            context.startForegroundService(TagGenerationService.intentScanIncremental(context))
+                        }
                     )
                 }
                 showDuplicateManager -> {

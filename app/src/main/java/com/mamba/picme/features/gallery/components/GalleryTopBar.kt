@@ -1,14 +1,15 @@
 package com.mamba.picme.features.gallery.components
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Sort
-import androidx.compose.material.icons.outlined.FilterDrama
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Sell
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.DropdownMenu
@@ -16,13 +17,16 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import com.mamba.picme.R
 import com.mamba.picme.domain.model.GroupingMode
@@ -33,7 +37,7 @@ import com.mamba.picme.domain.model.GroupingMode.NONE
 import com.mamba.picme.domain.model.GroupingMode.PERSON
 import com.mamba.picme.domain.model.GroupingMode.SEXY
 import com.mamba.picme.domain.model.GroupingMode.SWIMWEAR
-import androidx.compose.foundation.layout.Box
+import com.mamba.picme.service.tag.TagGenerationService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,8 +52,8 @@ fun GalleryTopBar(
     onShareSelected: () -> Unit,
     onGroupingModeSelected: (GroupingMode) -> Unit,
     onManageDuplicates: () -> Unit,
-    onOpenTestDataTools: () -> Unit,
-    onSearchClick: () -> Unit = {}
+    onSearchClick: () -> Unit = {},
+    onTagScanClick: () -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -84,20 +88,22 @@ fun GalleryTopBar(
                     Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.delete))
                 }
             } else {
+                val isScanning by TagGenerationService.isScanning.collectAsState(false)
+                IconButton(onClick = onTagScanClick) {
+                    Icon(
+                        Icons.Rounded.Sell,
+                        contentDescription = "TAG 扫描",
+                        tint = if (isScanning) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
+                    )
+                }
+                IconButton(onClick = onManageDuplicates) {
+                    Icon(Icons.Rounded.ContentCopy, contentDescription = stringResource(R.string.manage_duplicates))
+                }
                 IconButton(onClick = onSearchClick) {
                     Icon(
                         Icons.Rounded.Search,
                         contentDescription = "搜索照片"
                     )
-                }
-                IconButton(onClick = onOpenTestDataTools) {
-                    Icon(
-                        Icons.Rounded.CloudDownload,
-                        contentDescription = stringResource(R.string.test_data_tools)
-                    )
-                }
-                IconButton(onClick = onManageDuplicates) {
-                    Icon(Icons.Outlined.FilterDrama, contentDescription = stringResource(R.string.manage_duplicates))
                 }
                 GroupingMenu(
                     currentMode = groupingMode,

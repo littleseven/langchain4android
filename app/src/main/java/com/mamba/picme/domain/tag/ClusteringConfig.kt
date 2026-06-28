@@ -17,17 +17,20 @@ package com.mamba.picme.domain.tag
  */
 object ClusteringConfig {
 
-    /** 余弦相似度阈值：高于此值归入已有簇（越接近 1.0 越严格） */
-    const val COSINE_THRESHOLD = 0.72f
+    /** 余弦相似度阈值：高于此值归入已有簇（越接近 1.0 越严格）
+     *  从 0.72 放宽至 0.65，使更多相似人脸被归入同一簇，减少噪声点 */
+    const val COSINE_THRESHOLD = 0.65f
 
-    /** DBSCAN: 余弦距离阈值 = 1 - COSINE_THRESHOLD */
-    const val DBSCAN_EPS = 0.28f
+    /** DBSCAN: 余弦距离阈值 = 1 - COSINE_THRESHOLD
+     *  从 0.28 放宽至 0.35，使聚类更宽松，产生更多人物簇 */
+    const val DBSCAN_EPS = 0.35f
 
     /** DBSCAN: 最小邻居数（≥2 形成核心点，避免单点成簇） */
     const val DBSCAN_MIN_PTS = 2
 
-    /** 簇内部平均相似度下限（< 此值则继续分裂） */
-    const val CLUSTER_COHESION_MIN = 0.72f
+    /** 簇内部平均相似度下限（< 此值则继续分裂）
+     *  从 0.72 放宽至 0.65，减少过度分裂 */
+    const val CLUSTER_COHESION_MIN = 0.65f
 
     /** 增量积累达到此数量后触发全量 DBSCAN 重聚 */
     const val RE_CLUSTER_THRESHOLD = 100

@@ -222,6 +222,15 @@ class TagScanOrchestrator(
 
     /**
      * 执行单个 Pass 阶段（用于兼容旧的 Pass 1/2/3 独立控制按钮）
+     *
+     * ## 增量模式行为（INCREMENTAL）
+     * - **Pass 1**：仅处理 `faceRoiResult IS NULL` 的媒体（未执行人脸检测）
+     * - **Pass 3**：仅处理 `labels IS NULL` 的媒体（未生成标签）
+     * - **Pass 4**：仅处理 `semanticEmbedding IS NULL` 的媒体（未语义编码）
+     * - **Pass 2**：始终执行全局 DBSCAN（增量 embedding 自动参与）
+     *
+     * ## 全量模式行为（FULL）
+     * - 清空对应阶段旧数据后全量重跑
      */
     suspend fun schedulePass(
         pass: TagScanPass,
