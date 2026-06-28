@@ -136,12 +136,51 @@ class ChineseQueryTranslator(
     private fun tryModelTranslate(query: String): String? {
         return try {
             val result = lazyTranslator.translate(query)
-            // 如果翻译结果与输入相同，说明翻译失败
-            if (result == query) null else result
+            // 质量校验：过滤异常输出
+            if (!isTranslationValid(query, result)) {
+                Log.w(TAG, "Translation quality check failed: '$query' -> '$result'")
+                return null
+            }
+            Log.d(TAG, "Model translated: '$query' -> '$result'")
+            result
         } catch (e: Exception) {
             Log.w(TAG, "Model translation failed", e)
             null
         }
+    }
+
+    /**
+     * 翻译结果质量校验
+     *
+     * 过滤以下异常输出：
+     * 1. 与输入相同（翻译失败）
+     * 2. 空字符串或纯空白
+     * 3. 包含大量重复单字符（如 "aaaa"）
+     * 4. 包含异常噪音字符（如 "♪", "⁇", "▁"）
+     * 5. 无意义拟声词（如 "Ooh", "oh", "ho" 占比过高）
+     * 6. 结果过短（< 2 个有效字符）
+     */
+    private fun isTranslationValid(input: String, output: String): Boolean {
+        if (output.isBlank()) return false
+        if (output == input) return false
+
+        // 过滤噪音字符
+        val noiseChars = setOf('♪', '⁇', '▁')
+        if (output.any { it in noiseChars }) return false
+
+        // 过滤拟声词占比过高（如 "Ooh, oh, ho...ooh!"）
+        val interjectionWords = setOf("ooh", "oh", "ho", "ah", "uh", "um", "ha", "heh")
+        val words = output.lowercase().split(Regex("[^a-z]+")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return false
+        val interjectionCount = words.count { it in interjectionWords }
+        if (interjectionCount.toFloat() / words.size > 0.5f) return false
+
+        // 过滤重复单字符（如 "aaaa" 或 "a a a a"）
+        val clean = output.filter { it.isLetter() }
+        if (clean.length < 2) return false
+        if (clean.toSet().size == 1) return false // 全是同一个字符
+
+        return true
     }
 
     /**

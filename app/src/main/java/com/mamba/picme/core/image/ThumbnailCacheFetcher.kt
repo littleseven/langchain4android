@@ -32,8 +32,11 @@ class ThumbnailCacheFetcher(
     override suspend fun fetch(): FetchResult? {
         val cached = cache.get(uri.toString())
         if (cached != null && !cached.isRecycled) {
+            // 创建 Bitmap 副本，避免 ThumbnailCache LRU 驱逐或 evict() 回收后
+            // Compose 绘制时出现 "Canvas: trying to use a recycled bitmap" 崩溃
+            val copiedBitmap = cached.copy(cached.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
             return DrawableResult(
-                drawable = BitmapDrawable(cached),
+                drawable = BitmapDrawable(copiedBitmap),
                 isSampled = true,
                 dataSource = DataSource.MEMORY_CACHE
             )
