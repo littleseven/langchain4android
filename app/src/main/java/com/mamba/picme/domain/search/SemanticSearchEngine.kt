@@ -126,17 +126,28 @@ class SemanticSearchEngine(
         }
 
         // 3. 计算余弦相似度并排序
-        return candidates
+        val scoredResults = candidates
             .mapNotNull { entity ->
                 val imageEmbedding = base64ToFloatArray(entity.semanticEmbedding) ?: return@mapNotNull null
                 val similarity = engine.cosineSimilarity(textEmbedding, imageEmbedding)
+                if (similarity.isNaN()) {
+                    Log.w(TAG, "NaN similarity for mediaId=${entity.id}")
+                    return@mapNotNull null
+                }
                 SemanticScoredMedia(entity.toDomain(), similarity)
             }
             .sortedByDescending { it.score }
             .take(topK)
-            .also {
-                Log.d(TAG, "Semantic search: original='$query', translated='$translatedQuery', candidates=${candidates.size}, results=${it.size}")
-            }
+
+        // 日志：展示召回结果详情
+        if (scoredResults.isNotEmpty()) {
+            val topResults = scoredResults.take(3).joinToString { "${it.media.fileName}=${String.format("%.3f", it.score)}" }
+            Log.i(TAG, "Semantic recall: query='$query' -> '$translatedQuery', candidates=${candidates.size}, returned=${scoredResults.size}, top3=[$topResults]")
+        } else {
+            Log.w(TAG, "Semantic recall empty: query='$query' -> '$translatedQuery', candidates=${candidates.size}, no match above threshold")
+        }
+
+        return scoredResults
     }
 
     /**
