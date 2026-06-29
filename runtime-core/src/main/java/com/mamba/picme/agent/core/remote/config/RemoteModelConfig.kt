@@ -50,7 +50,7 @@ data class RemoteModelConfig(
          * 腾讯云 SCF AI Gateway 默认配置
          */
         val TENCENT_SCF_DEFAULT = RemoteModelConfig(
-            modelId = "kimi-k2.6",
+            modelId = "deepseek-v4-flash-202605",
             protocol = RemoteProtocol.OPENAI,
             baseUrl = "https://1412656811-f92agkf1y7.ap-guangzhou.tencentscf.com/"
         )
@@ -64,14 +64,14 @@ data class RemoteModelConfig(
                 displayName = "腾讯云 TokenHub",
                 baseUrl = "https://tokenhub.tencentmaas.com/v1/",
                 protocol = RemoteProtocol.OPENAI,
-                models = listOf("deepseek-v4-flash", "kimi-k2.6")
+                models = listOf("deepseek-v4-flash", "kimi-k2.6","kimi-k2.7-code")
             ),
             RemoteModelProvider(
                 providerId = "kimi-official",
                 displayName = "Kimi 官方",
                 baseUrl = "https://api.moonshot.cn/v1/",
                 protocol = RemoteProtocol.OPENAI,
-                models = listOf("kimi-k2.6", "kimi-k2.5", "moonshot-v1-8k")
+                models = listOf("kimi-k2.6", "kimi-k2.5", "kimi-k2.7")
             ),
             RemoteModelProvider(
                 providerId = "deepseek-official",

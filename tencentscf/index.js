@@ -32,8 +32,9 @@ const CLOUDFLARE_MODEL = 'deepseek/deepseek-chat';
 const TOKENHUB_URL = 'https://tokenhub.tencentmaas.com/v1/chat/completions';
 const TOKENHUB_MODELS = {
     'deepseek-v4-flash': 'deepseek-v4-flash',
-    'deepseek-v4-flash-202605': 'deepseek-v4-flash',
-    'kimi-k2.6': 'kimi-k2.6'
+    'deepseek-v4-flash-202605': 'deepseek-v4-flash-202605',
+    'kimi-k2.6': 'kimi-k2.6',
+    'kimi-k2.7-code': 'kimi-k2.7-code'
 };
 
 // 统一入口路径（兼容已发布客户端的旧路径 /chat/completions）
@@ -51,7 +52,8 @@ const MODEL_ROUTES = {
     // TokenHub 路由
     'deepseek-v4-flash-202605': 'tokenhub',
     'deepseek-v4-flash': 'tokenhub',
-    'kimi-k2.6': 'tokenhub'
+    'kimi-k2.6': 'tokenhub',
+    'kimi-k2.7-code': 'tokenhub'
 };
 
 // 客户端 modelId -> 上游真实 modelId 映射
