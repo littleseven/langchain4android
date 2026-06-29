@@ -497,6 +497,8 @@
     <string name="voice_unavailable">語音識別未初始化</string>
     <string name="hold_to_speak">按住說話</string>
     <string name="release_to_stop">鬆開結束</string>
+    <string name="release_to_cancel">鬆手取消</string>
+    <string name="record_audio_permission_denied">請允許麥克風權限以使用語音輸入</string>
 
     <!-- Search Test -->
     <string name="search_test_title">搜索召回測試</string>

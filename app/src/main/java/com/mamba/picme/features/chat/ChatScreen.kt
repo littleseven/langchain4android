@@ -118,7 +118,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.draw.shadow
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
+import com.mamba.picme.agent.core.platform.voice.AsrEngine
+import com.mamba.picme.agent.core.platform.voice.SherpaOnnxAsrEngine
+import com.mamba.picme.features.camera.voice.SystemAsrEngine
+import com.mamba.picme.features.camera.voice.PushToTalkEngine
+import java.io.File
 
 private const val TAG = "ChatScreen"
 
@@ -511,6 +522,49 @@ private fun ChatInputArea(
         )
     }
 
+    // 语音输入：按需加载本地 Sherpa-ONNX ASR 模型，未配置时回退到系统 ASR
+    val localAsrModel by settingsRepository.localAsrModelFlow.collectAsState(initial = "")
+    var asrEngine by remember(context) {
+        mutableStateOf<AsrEngine>(SystemAsrEngine(context))
+    }
+    LaunchedEffect(context, localAsrModel) {
+        val engine = withContext(Dispatchers.IO) {
+            if (localAsrModel.isNotBlank()) {
+                val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
+                val isModelReady = modelDir.exists() && modelDir.isDirectory &&
+                    modelDir.walkTopDown().any { it.name.endsWith(".onnx") } &&
+                    File(modelDir, "tokens.txt").exists()
+
+                if (isModelReady) {
+                    val sherpa = SherpaOnnxAsrEngine(context, modelDir.absolutePath)
+                    if (sherpa.isAvailable()) {
+                        Logger.i(TAG, "Chat ASR using local model: $localAsrModel")
+                        sherpa
+                    } else {
+                        Logger.w(TAG, "Local ASR init failed, falling back to system ASR")
+                        SystemAsrEngine(context)
+                    }
+                } else {
+                    Logger.w(TAG, "Local ASR model not ready: $localAsrModel")
+                    SystemAsrEngine(context)
+                }
+            } else {
+                Logger.d(TAG, "No local ASR model configured, using system ASR")
+                SystemAsrEngine(context)
+            }
+        }
+        val previousEngine = asrEngine
+        asrEngine = engine
+        if (previousEngine !== engine) {
+            previousEngine.release()
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            asrEngine.release()
+        }
+    }
+
     // DeepSeek 风格：白色大圆角卡片统一包裹输入区域（带阴影增强视觉层次）
     Column(
         modifier = Modifier
@@ -566,7 +620,14 @@ private fun ChatInputArea(
                         scope.launch {
                             settingsRepository.updateChatInputMode("text")
                         }
-                    }
+                    },
+                    onVoiceResult = { result ->
+                        if (result.isNotBlank() && !isProcessing) {
+                            onSendMessage(result.trim())
+                        }
+                    },
+                    asrEngine = asrEngine,
+                    scope = scope
                 )
             }
         }
@@ -841,8 +902,58 @@ private fun CircularIconButton(
 
 @Composable
 private fun ChatVoiceInputMode(
-    onSwitchToText: () -> Unit
+    onSwitchToText: () -> Unit,
+    onVoiceResult: (String) -> Unit,
+    asrEngine: AsrEngine,
+    scope: CoroutineScope
 ) {
+    val context = LocalContext.current
+    var isListening by remember { mutableStateOf(false) }
+    var isCancelRecord by remember { mutableStateOf(false) }
+    var discardResult by remember { mutableStateOf(false) }
+
+    val pushToTalkEngine = remember(asrEngine) {
+        PushToTalkEngine(asrEngine, scope, context)
+    }
+
+    val voiceUnavailableText = stringResource(R.string.voice_unavailable)
+    val permissionDeniedText = stringResource(R.string.record_audio_permission_denied)
+
+    val startRecording = {
+        if (!asrEngine.isAvailable()) {
+            Toast.makeText(context, voiceUnavailableText, Toast.LENGTH_SHORT).show()
+        } else {
+            discardResult = false
+            isListening = true
+            isCancelRecord = false
+            Logger.d(TAG, "Chat push-to-talk started")
+            pushToTalkEngine.start { result ->
+                isListening = false
+                isCancelRecord = false
+                Logger.d(TAG, "Chat ASR result: '$result', discard=$discardResult")
+                if (result.isNotBlank() && !discardResult) {
+                    onVoiceResult(result)
+                }
+                discardResult = false
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            Toast.makeText(context, permissionDeniedText, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 页面退出或切换到键盘时强制停止录音
+    DisposableEffect(Unit) {
+        onDispose {
+            pushToTalkEngine.stop()
+        }
+    }
+
     // 语音输入内容区域（外层已由 ChatInputArea 统一包裹白色卡片）
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -861,13 +972,66 @@ private fun ChatVoiceInputMode(
             )
 
             // 中间：按住说话按钮（占据剩余空间）
+            val buttonBackground = when {
+                isListening && !isCancelRecord -> MaterialTheme.colorScheme.primary
+                isListening && isCancelRecord -> Color(0xFFE53935)
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            }
+            val buttonTextColor = if (isListening) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(44.dp)
                     .clip(RoundedCornerShape(22.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .clickable { /* TODO: 集成语音按住说话 */ },
+                    .background(buttonBackground)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { change ->
+                                    when {
+                                        // 手指按下：检查麦克风权限并开始录音
+                                        change.pressed && !change.isConsumed && !isListening -> {
+                                            val hasPermission = ContextCompat.checkSelfPermission(
+                                                context,
+                                                Manifest.permission.RECORD_AUDIO
+                                            ) == PackageManager.PERMISSION_GRANTED
+
+                                            if (hasPermission) {
+                                                startRecording()
+                                            } else {
+                                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                            }
+                                        }
+                                        // 手指抬起：停止录音
+                                        !change.pressed -> {
+                                            if (isListening) {
+                                                if (isCancelRecord) {
+                                                    discardResult = true
+                                                }
+                                                pushToTalkEngine.stop()
+                                                isListening = false
+                                                isCancelRecord = false
+                                            }
+                                        }
+                                    }
+
+                                    // 手指移动：移出按钮区域视为取消
+                                    if (isListening && change.pressed) {
+                                        val bounds = this@pointerInput.size
+                                        val x = change.position.x
+                                        val y = change.position.y
+                                        val newCancel = x < 0 || x > bounds.width || y < 0 || y > bounds.height
+                                        if (newCancel != isCancelRecord) {
+                                            isCancelRecord = newCancel
+                                        }
+                                    }
+                                    change.consume()
+                                }
+                            }
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Row(
@@ -877,17 +1041,24 @@ private fun ChatVoiceInputMode(
                     Icon(
                         imageVector = Icons.Rounded.KeyboardVoice,
                         contentDescription = stringResource(R.string.cd_switch_to_voice),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        tint = buttonTextColor,
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
-                        text = stringResource(R.string.hold_to_speak),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        text = when {
+                            isListening && !isCancelRecord -> stringResource(R.string.release_to_stop)
+                            isListening && isCancelRecord -> stringResource(R.string.release_to_cancel)
+                            else -> stringResource(R.string.hold_to_speak)
+                        },
+                        color = buttonTextColor,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
             }
+
+            // 右侧：占位保持对称
+            Box(modifier = Modifier.size(36.dp))
         }
     }
 }

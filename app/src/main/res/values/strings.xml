@@ -503,6 +503,8 @@
     <string name="voice_unavailable">Voice recognition not initialized</string>
     <string name="hold_to_speak">Hold to speak</string>
     <string name="release_to_stop">Release to stop</string>
+    <string name="release_to_cancel">Release to cancel</string>
+    <string name="record_audio_permission_denied">Please allow microphone permission to use voice input</string>
 
     <!-- TAG / AI Labels -->
     <string name="tag_label_title">Tags (%1$d)</string>

@@ -495,6 +495,8 @@
     <string name="voice_unavailable">语音识别未初始化</string>
     <string name="hold_to_speak">按住说话</string>
     <string name="release_to_stop">松开结束</string>
+    <string name="release_to_cancel">松手取消</string>
+    <string name="record_audio_permission_denied">请允许麦克风权限以使用语音输入</string>
 
     <!-- Search Test -->
     <string name="search_test_title">搜索召回测试</string>
