@@ -64,9 +64,9 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
 
-    // sherpa-onnx v1.10.46（2025-02，匹配 2024-01 的 KWS 模型）
+    // sherpa-onnx v1.13.3（2026-06，内置 ONNX Runtime 1.24.3，支持 16KB page size）
     // compileOnly + app 直接依赖：规避 Library 模块打包 AAR 时禁止直接依赖本地 .aar 限制
-    compileOnly(files("libs/sherpa-onnx-1.10.46.aar"))
+    compileOnly(files("libs/sherpa-onnx-1.13.3.aar"))
 
     // agent-core: 合并后的 langchain4j 单库模块（core + open-ai + okhttp）
     api(project(":agent-core"))

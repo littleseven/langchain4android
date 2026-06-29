@@ -164,9 +164,10 @@
 - `DEVELOPER` — Debug 总开关、相机/人脸/日志浮层、Shader 调试、日志模块
 
 **导航实现**
-- 路由：`Screen.Settings.route = "settings/{category}"`，`category` 默认空字符串对应主菜单
+- 主菜单路由：`Screen.Settings.route = "settings"`
+- 二级页路由：`Screen.SettingsCategory.route = "settings/{category}"`
 - `MainActivity.kt` 解析 `category` 参数并映射到 `SettingsCategory`
-- 主菜单点击卡片后 `onNavigateToCategory` 调用 `navController.navigate("settings/${category.name.lowercase()}")`
+- 主菜单点击卡片后 `onNavigateToCategory` 调用 `navController.navigate(Screen.SettingsCategory.createRoute(category.name.lowercase()))`
 - 所有二级页共用同一个 `SettingsScreen` Composable，通过 `category` 条件渲染对应区块
 
 **UI 约定**

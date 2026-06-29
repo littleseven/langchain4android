@@ -152,7 +152,7 @@ android {
         jniLibs {
             useLegacyPackaging = true
             // 解决 onnxruntime-android 与 sherpa-onnx 的 libonnxruntime.so 冲突
-            // sherpa-onnx-1.10.46 内置 ONNX Runtime 1.17.1，onnxruntime-android 必须与之一致
+            // sherpa-onnx-1.13.3 内置 ONNX Runtime 1.24.3，onnxruntime-android 必须与之一致
             // 否则 libonnxruntime4j_jni.so 与 libonnxruntime.so ABI 不匹配
             // 会导致 UnsatisfiedLinkError: cannot locate symbol "OrtGetApiBase"
             pickFirsts += "lib/arm64-v8a/libonnxruntime.so"
@@ -261,7 +261,7 @@ dependencies {
     implementation(project(":beauty-engine"))
     implementation(project(":runtime-core"))
     // sherpa-onnx: runtime-core 编译期依赖，app 模块提供运行时 AAR 打包
-    implementation(files("../runtime-core/libs/sherpa-onnx-1.10.46.aar"))
+    implementation(files("../runtime-core/libs/sherpa-onnx-1.13.3.aar"))
     // Agent 核心模块（将来提取独立库）
     // GPUPixel 已移除，全部能力由自研引擎提供
 
@@ -269,7 +269,7 @@ dependencies {
     implementation(project(":sentencepiece"))
 
     // ONNX Runtime（OPUS-MT 翻译模型推理后端）
-    // 版本必须与 sherpa-onnx-1.10.46 内置的 ONNX Runtime 一致（1.17.1）
+    // 版本必须与 sherpa-onnx-1.13.3 内置的 ONNX Runtime 一致（1.24.3）
     // 否则 libonnxruntime4j_jni.so 与 libonnxruntime.so ABI 不匹配
     implementation(libs.onnxruntime.android)
     // Core library desugaring（mamba-agent 依赖需要）
