@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">覓影相冊</string>
+    <string name="chat">聊天</string>
     <string name="camera">相機</string>
     <string name="gallery">相簿</string>
     <string name="settings">設定</string>

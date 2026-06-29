@@ -67,7 +67,6 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -108,10 +107,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mamba.picme.R
 import com.mamba.picme.core.common.Logger
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.activity.compose.BackHandler
 import androidx.core.net.toUri
 import com.mamba.picme.features.chat.ChatThreadSidebar
 import com.mamba.picme.features.chat.components.QuickActionBar
+import com.mamba.picme.features.common.components.ExpandableFabMenu
+import com.mamba.picme.features.common.components.ExpandableFabMenuItem
 import com.mamba.picme.data.preferences.UserPreferencesRepository
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import androidx.compose.foundation.text.KeyboardActions
@@ -124,20 +126,21 @@ import androidx.compose.ui.draw.shadow
 private const val TAG = "ChatScreen"
 
 /**
- * Chat 首页 — AI 对话核心入口
+ * Chat 二级页 — AI 对话入口
  *
+ * 从相册首页通过 plus 菜单进入。页面提供返回按钮回到相册。
  * 布局：
- * - 顶部栏：Logo + 设置 + 清空
+ * - 顶部栏：返回 + 设置 + 清空
  * - 消息列表：LazyColumn 展示对话历史
  * - 输入区：ModelSelector + 输入框 + 发送按钮
- * - 快捷入口：相机 / 相册 / 编辑
+ * - 快捷入口：相机 / 设置 / 模型中心
  */
 @Suppress("LongMethod") // Top-level Compose screen: scaffold + list + input + sidebar
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel = viewModel(),
+    onNavigateBack: () -> Unit,
     onNavigateToCamera: () -> Unit,
-    onNavigateToGallery: () -> Unit,
     onNavigateToModelCenter: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
@@ -186,6 +189,7 @@ fun ChatScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatTopBar(
+                onNavigateBack = onNavigateBack,
                 onOpenSidebar = { isSidebarOpen = true },
                 onNavigateToSettings = onNavigateToSettings,
                 onClearChat = { viewModel.clearChat() }
@@ -235,44 +239,34 @@ fun ChatScreen(
                 )
             }
 
-            // 快捷入口 FAB — 右下角浮动
-            FloatingActionButton(
-                onClick = { showQuickActions = !showQuickActions },
+            // 快捷入口 FAB — Chat 内跳转 Camera / Settings / Model Center
+            val quickActionItems = listOf(
+                ExpandableFabMenuItem(
+                    icon = Icons.Rounded.CameraAlt,
+                    label = stringResource(R.string.camera),
+                    onClick = onNavigateToCamera
+                ),
+                ExpandableFabMenuItem(
+                    icon = Icons.Rounded.Settings,
+                    label = stringResource(R.string.settings),
+                    onClick = onNavigateToSettings
+                ),
+                ExpandableFabMenuItem(
+                    icon = Icons.Rounded.Download,
+                    label = stringResource(R.string.model_download),
+                    onClick = onNavigateToModelCenter
+                )
+            )
+            ExpandableFabMenu(
+                items = quickActionItems,
+                expanded = showQuickActions,
+                onToggleExpanded = { showQuickActions = !showQuickActions },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 16.dp, bottom = 80.dp)
-                    .navigationBarsPadding()
-                    .size(52.dp),
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Add,
-                    contentDescription = stringResource(R.string.cd_quick_actions),
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            // 快捷入口展开面板
-            if (showQuickActions) {
-                QuickActionPanel(
-                    onCameraClick = {
-                        showQuickActions = false
-                        onNavigateToCamera()
-                    },
-                    onGalleryClick = {
-                        showQuickActions = false
-                        onNavigateToGallery()
-                    },
-                    onModelDownloadClick = {
-                        showQuickActions = false
-                        onNavigateToModelCenter()
-                    },
-                    onDismiss = { showQuickActions = false },
-                    modifier = Modifier.align(Alignment.BottomEnd)
-                )
-            }
+                    .navigationBarsPadding(),
+                contentDescription = stringResource(R.string.cd_quick_actions)
+            )
 
             // 侧边栏
             ChatThreadSidebar(
@@ -309,6 +303,7 @@ fun ChatScreen(
 
 @Composable
 private fun ChatTopBar(
+    onNavigateBack: () -> Unit,
     onOpenSidebar: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onClearChat: () -> Unit
@@ -323,8 +318,15 @@ private fun ChatTopBar(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            IconButton(onClick = onNavigateBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
             IconButton(onClick = onOpenSidebar) {
                 Icon(
                     imageVector = Icons.Rounded.Menu,
@@ -927,84 +929,6 @@ private fun ChatVoiceInputMode(
                     )
                 }
             }
-        }
-    }
-}
-
-/**
- * 快捷入口展开面板 — 悬浮在右下角
- */
-@Composable
-private fun QuickActionPanel(
-    onCameraClick: () -> Unit,
-    onGalleryClick: () -> Unit,
-    onModelDownloadClick: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.3f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onDismiss
-            )
-            .padding(end = 16.dp, bottom = 168.dp)
-    ) {
-        Column(
-            modifier = Modifier.align(Alignment.BottomEnd),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            QuickActionFabItem(
-                label = stringResource(R.string.gallery),
-                icon = Icons.Rounded.PhotoLibrary,
-                onClick = onGalleryClick
-            )
-            QuickActionFabItem(
-                label = stringResource(R.string.camera),
-                icon = Icons.Rounded.CameraAlt,
-                onClick = onCameraClick
-            )
-            QuickActionFabItem(
-                label = stringResource(R.string.model_download),
-                icon = Icons.Rounded.Download,
-                onClick = onModelDownloadClick
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuickActionFabItem(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = label,
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
-        FloatingActionButton(
-            onClick = onClick,
-            modifier = Modifier.size(48.dp),
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(24.dp)
-            )
         }
     }
 }

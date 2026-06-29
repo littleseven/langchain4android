@@ -30,18 +30,18 @@ data/                     ← 仓储实现、Room DB、DataStore、Retrofit
 di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 ```
 
-### 1.2 页面导航（6 屏，Chat 为默认首页）
+### 1.2 页面导航（6 屏，Gallery 为默认首页）
 
 | Screen | Route | 定位 |
 |--------|-------|------|
-| `Chat` | `chat` | **默认首页** — AI 对话主页，模型切换、快捷入口 |
+| `Gallery` | `gallery` | **默认首页** — 智能相册、媒体浏览、AI 搜索、分类管理；右下角 plus 菜单聚合 Chat/Camera/Settings/ModelCenter 入口 |
+| `Chat` | `chat` | 二级页 — AI 对话主页，模型切换、快捷入口；顶部栏提供返回相册按钮 |
 | `Camera` | `camera` | 辅助入口 — 拍照、美颜预览、语音控制 |
-| `Gallery` | `gallery` | 智能相册 — 媒体浏览、AI 搜索、分类管理 |
-| `Editor` | `editor` | 图片编辑 — 美颜调节、滤镜、风格特效 |
+| `Editor` | `editor` | 图片编辑 — 美颜调节、滤镜、风格特效（当前未注册在 NavHost，从相册/MediaPager 进入） |
 | `Settings` | `settings` | 设置 — 模型管理、语音、远程配置、调试 |
 | `Debug` | `debug` | 开发工具 — 日志、截图、样本数据生成 |
 
-> **2026-06 产品重心转移**：Chat 和 Gallery 为当前主力页面；Camera 降级为辅助入口。详见 `PRODUCT.md`。
+> **2026-06 产品重心转移**：Gallery 为默认首页，Chat/Camera/Settings/ModelCenter 作为二级页从 Gallery plus 菜单进入；Camera 降级为辅助入口。详见 `PRODUCT.md`。
 
 ### 1.3 关键入口文件
 

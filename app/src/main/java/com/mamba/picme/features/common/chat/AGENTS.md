@@ -1,4 +1,4 @@
-# Chat 首页模块技术实现规范
+# Chat 二级页模块技术实现规范
 
 > **边界声明（Boundary Statement）**
 > - 本文档仅承载本模块的实现细节（架构、代码约束、检查清单）。
@@ -6,7 +6,7 @@
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 `AGENTS.md` 为准。
 > - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
-**模块定位**: 应用首页，AI 对话核心入口，支持本地/远程模型切换、对话持久化、快捷能力入口
+**模块定位**: 二级页，AI 对话核心入口，从相册首页 plus 菜单进入；支持本地/远程模型切换、对话持久化、快捷能力入口
 
 **主要维护者**: [RD] 全栈工程师
 
@@ -26,7 +26,7 @@
 
 ```
 ┌─────────────────────────────┐
-│  TopBar: Logo + 设置 + 清空  │
+│  TopBar: 返回 + 设置 + 清空  │
 ├─────────────────────────────┤
 │                             │
 │      MessageList (LazyColumn)│
@@ -38,8 +38,8 @@
 │  ModelSelector + InputBar   │
 │  [本地模型 ▼] [输入框] [发送]│
 ├─────────────────────────────┤
-│  QuickActionBar              │
-│  [相机] [相册] [编辑]        │
+│  ExpandableFabMenu           │
+│  [相机] [设置] [模型下载]    │
 └─────────────────────────────┘
 ```
 
@@ -47,12 +47,13 @@
 
 | 组件 | 文件 | 职责 |
 |------|------|------|
-| **ChatScreen** | `features/chat/ChatScreen.kt` | 首页容器，组合各子组件 |
+| **ChatScreen** | `features/chat/ChatScreen.kt` | 二级页容器，组合各子组件 |
 | **ChatViewModel** | `features/chat/ChatViewModel.kt` | 对话状态管理、消息发送、模型切换 |
 | **MessageList** | `features/chat/components/MessageList.kt` | 消息列表渲染，支持多种消息类型 |
 | **ModelSelector** | `features/chat/components/ModelSelector.kt` | 输入框左侧下拉，本地/远程模型切换 |
 | **ChatInputBar** | `features/chat/components/ChatInputBar.kt` | 输入框 + 发送按钮 + 语音切换 |
-| **QuickActionBar** | `features/chat/components/QuickActionBar.kt` | 底部快捷入口：相机/相册/编辑 |
+| **ExpandableFabMenu** | `features/common/components/ExpandableFabMenu.kt` | 右下角可展开菜单：相机/设置/模型下载 |
+| **QuickActionBar** | `features/chat/components/QuickActionBar.kt` | 底部快捷入口：相机/相册/编辑（可选保留） |
 | **MessageRepository** | `data/repository/MessageRepository.kt` | Room 数据库读写，对话持久化 |
 
 ## 3. 模型切换实现 (Model Switching)

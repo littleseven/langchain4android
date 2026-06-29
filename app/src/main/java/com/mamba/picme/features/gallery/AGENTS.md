@@ -6,7 +6,7 @@
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 `AGENTS.md` 为准。
 > - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
-**模块定位**: 提供智能聚类相册浏览、媒体查看器、批量操作与重复照片管理功能
+**模块定位**: 应用默认首页，提供智能聚类相册浏览、媒体查看器、批量操作与重复照片管理功能；右下角 plus 菜单聚合 Chat / Camera / Settings / Model Center 四个二级页入口，语音 Agent 面板提供自然语言交互入口
 
 **主要维护者**: [RD] 全栈工程师
 
@@ -158,7 +158,24 @@ fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
 }
 ```
 
-### 2.5 静态图美颜编辑（2026-05 新增）
+### 2.5 首页导航与 plus 菜单（2026-06 新增）
+
+**首页定位**:
+- `GalleryScreen` 是 `MainActivity` NavHost 的 `startDestination`
+- 系统返回键在相册无内部状态（无选择/Pager/重复管理器/plus 展开）时退出应用
+
+**plus 菜单**:
+- 使用共享组件 `ExpandableFabMenu`（`features/common/components/ExpandableFabMenu.kt`）
+- 位置：右下角，底部 padding 84.dp，位于语音 Agent 面板上方
+- 入口项（自上而下）：Chat、Camera、Settings、Model Center
+- 点击菜单项后先折叠菜单再执行导航
+
+**语音 Agent 面板**:
+- 位置：plus 菜单下方，底部 padding 16.dp
+- 使用 `GalleryAgentPanel` + `AgentChatPanel` 公共组件
+- 负责自然语言相册浏览/编辑/管理指令
+
+### 2.6 静态图美颜编辑（2026-05 新增）
 
 **技术规范**:
 - **入口**: 

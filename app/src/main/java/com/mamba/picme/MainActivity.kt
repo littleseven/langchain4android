@@ -162,7 +162,7 @@ class MainActivity : ComponentActivity() {
                         ) { innerPadding ->
                             NavHost(
                                 navController = navController,
-                                startDestination = Screen.Chat.route,
+                                startDestination = Screen.Gallery.route,
                                 modifier = Modifier.padding(innerPadding),
                                 enterTransition = {
                                     fadeIn(tween(400)) + slideIntoContainer(
@@ -199,8 +199,8 @@ class MainActivity : ComponentActivity() {
                                 }
                                 ChatScreen(
                                     viewModel = chatViewModel,
+                                    onNavigateBack = { navController.popBackStack() },
                                     onNavigateToCamera = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
-                                    onNavigateToGallery = { navController.navigate(Screen.Gallery.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToModelCenter = { navController.navigate(Screen.ModelCenter.createRoute("llm"), navOptions { launchSingleTop = true }) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) }
                                 )
@@ -231,9 +231,10 @@ class MainActivity : ComponentActivity() {
                                 }
                                 GalleryScreen(
                                     viewModel = mediaViewModel,
-                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToChat = { navController.navigate(Screen.Chat.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToCamera = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToModelCenter = { navController.navigate(Screen.ModelCenter.createRoute("llm"), navOptions { launchSingleTop = true }) },
                                     onNavigateToDebug = { navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToTagControl = {
                                         navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true })

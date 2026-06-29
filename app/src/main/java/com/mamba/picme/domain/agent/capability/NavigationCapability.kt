@@ -65,7 +65,7 @@ class NavigationCapability(
     )
 
     override fun getCommandDescription(command: String): String = when (command) {
-        "navigate_to" -> "导航到指定页面，参数: destination (camera|gallery|settings|debug|model_center)"
+        "navigate_to" -> "导航到指定页面，参数: destination (chat|camera|gallery|settings|debug|model_center)"
         "go_back" -> "返回上一页，无参数"
         else -> "未知命令"
     }

@@ -47,7 +47,7 @@ fun GalleryTopBar(
     isSelectionMode: Boolean,
     selectedCount: Int,
     groupingMode: GroupingMode,
-    onNavigateBack: () -> Unit,
+    onNavigateBack: (() -> Unit)? = null,
     onToggleSelectionMode: () -> Unit,
     onSelectAll: () -> Unit,
     onDeleteSelected: () -> Unit,
@@ -70,14 +70,16 @@ fun GalleryTopBar(
             )
         },
         navigationIcon = {
-            IconButton(onClick = {
-                if (isSelectionMode) {
-                    onToggleSelectionMode()
-                } else {
-                    onNavigateBack()
+            if (isSelectionMode || onNavigateBack != null) {
+                IconButton(onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelectionMode()
+                    } else {
+                        onNavigateBack?.invoke()
+                    }
+                }) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
                 }
-            }) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
             }
         },
         actions = {

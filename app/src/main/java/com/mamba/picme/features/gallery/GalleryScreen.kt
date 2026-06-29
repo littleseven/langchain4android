@@ -68,6 +68,8 @@ import androidx.core.net.toUri
 import com.mamba.picme.features.gallery.components.shareMediaAssets
 import com.mamba.picme.features.gallery.agent.GalleryAgentPanel
 import com.mamba.picme.features.common.chat.rememberAgentChatConfig
+import com.mamba.picme.features.common.components.ExpandableFabMenu
+import com.mamba.picme.features.common.components.ExpandableFabMenuItem
 import android.app.Activity
 import com.mamba.picme.features.gallery.capability.GalleryCapability
 import com.mamba.picme.features.common.SearchField
@@ -84,6 +86,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.ChatBubble
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SmartToy
 
 private const val TAG = "Gallery"
 private const val TAG_AGENT = "GalleryAgent"
@@ -91,9 +97,10 @@ private const val TAG_AGENT = "GalleryAgent"
 @Composable
 fun GalleryScreen(
     viewModel: MediaViewModel,
-    onNavigateBack: () -> Unit,
+    onNavigateToChat: () -> Unit,
     onNavigateToCamera: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToModelCenter: () -> Unit,
     onNavigateToDebug: () -> Unit,
     onNavigateToTagControl: () -> Unit = {}
 ) {
@@ -285,16 +292,17 @@ fun GalleryScreen(
         context = context,
         onNavigateTo = { destination ->
             when (destination.lowercase()) {
-                "camera" -> onNavigateBack()
+                "chat" -> onNavigateToChat()
+                "camera" -> onNavigateToCamera()
                 "gallery" -> { /* 已在相册页，无需导航 */ }
                 "settings" -> onNavigateToSettings()
                 "debug" -> onNavigateToDebug()
-                "model_center" -> onNavigateToSettings() // 从相册到模型中心需先进入设置
-                "llm_model_manager", "asr_model_manager" -> onNavigateToSettings()
+                "model_center" -> onNavigateToModelCenter()
+                "llm_model_manager", "asr_model_manager" -> onNavigateToModelCenter()
                 else -> Logger.w(TAG, "Unknown navigation destination: $destination")
             }
         },
-        onNavigateBack = onNavigateBack
+        onNavigateBack = {}
     )
 
     // 绑定 GalleryCapability 的 delegate，确保生命周期绑定
@@ -355,15 +363,17 @@ fun GalleryScreen(
         }
     }
 
-    BackHandler {
+    var showQuickActions by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = showQuickActions || showDuplicateManager || selectedMediaIndex != null || isSelectionMode) {
         when {
+            showQuickActions -> showQuickActions = false
             showDuplicateManager -> viewModel.toggleDuplicateManager(false)
             selectedMediaIndex != null -> selectedMediaIndex = null
             isSelectionMode -> {
                 isSelectionMode = false
                 selectedIds.clear()
             }
-            else -> onNavigateBack()
         }
     }
 
@@ -410,7 +420,6 @@ fun GalleryScreen(
                         isSelectionMode = isSelectionMode,
                         selectedCount = selectedIds.size,
                         groupingMode = groupingMode,
-                        onNavigateBack = onNavigateBack,
                         onToggleSelectionMode = {
                             isSelectionMode = false
                             selectedIds.clear()
@@ -610,27 +619,40 @@ fun GalleryScreen(
             val activeMedia = selectedMediaIndex?.let { allFlatMedia.getOrNull(it) }
             val rect = activeMedia?.let { thumbnailPositions[it.id] }
 
-            // Camera FAB — 在 chat 入口上方
+            // 快捷入口 FAB — 聚合 Chat / Camera / Settings / Model Center
             if (selectedMediaIndex == null && !showDuplicateManager) {
-                val cameraModifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 84.dp)
-                    .navigationBarsPadding()
-                Box(modifier = cameraModifier) {
-                    FloatingActionButton(
-                        onClick = onNavigateToCamera,
-                        modifier = Modifier.size(56.dp),
-                        shape = CircleShape,
-                        containerColor = MaterialTheme.colorScheme.primary
-                    ) {
-                        Icon(
-                            Icons.Rounded.CameraAlt,
-                            contentDescription = stringResource(R.string.camera),
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
+                val menuItems = listOf(
+                    ExpandableFabMenuItem(
+                        icon = Icons.Rounded.ChatBubble,
+                        label = stringResource(R.string.chat),
+                        onClick = onNavigateToChat
+                    ),
+                    ExpandableFabMenuItem(
+                        icon = Icons.Rounded.CameraAlt,
+                        label = stringResource(R.string.camera),
+                        onClick = onNavigateToCamera
+                    ),
+                    ExpandableFabMenuItem(
+                        icon = Icons.Rounded.Settings,
+                        label = stringResource(R.string.settings),
+                        onClick = onNavigateToSettings
+                    ),
+                    ExpandableFabMenuItem(
+                        icon = Icons.Rounded.SmartToy,
+                        label = stringResource(R.string.model_center),
+                        onClick = onNavigateToModelCenter
+                    )
+                )
+                ExpandableFabMenu(
+                    items = menuItems,
+                    expanded = showQuickActions,
+                    onToggleExpanded = { showQuickActions = !showQuickActions },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 84.dp)
+                        .navigationBarsPadding(),
+                    contentDescription = stringResource(R.string.cd_quick_actions)
+                )
             }
 
             // Agent Chat 入口 - 右下角浮动按钮

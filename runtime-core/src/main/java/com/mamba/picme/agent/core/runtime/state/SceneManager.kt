@@ -81,9 +81,9 @@ class SceneManager private constructor() {
     }
 
     fun getSceneDescription(scene: Scene): String = when (scene) {
-        Scene.CHAT -> "AI 对话首页，可以与本地/远程模型进行多轮对话"
+        Scene.CHAT -> "AI 对话页，从相册首页进入的二级页面，可以与本地/远程模型进行多轮对话"
         Scene.CAMERA -> "相机拍摄页面，可以拍照、录像、调节美颜参数"
-        Scene.GALLERY -> "相册页面，可以查看、删除、分享照片"
+        Scene.GALLERY -> "相册首页，应用默认入口，可以查看、删除、分享照片"
         Scene.SETTINGS -> "设置页面，可以调整应用配置"
         Scene.DEBUG -> "调试页面"
         Scene.UNKNOWN -> "未知页面"
