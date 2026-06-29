@@ -32,7 +32,6 @@ internal class CameraAgentCommandHandler(
     private val videoCapture: VideoCapture<Recorder>,
     private val cameraStateManager: CameraStateManager,
     private val coroutineScope: CoroutineScope,
-    private val onNavigateToSettings: () -> Unit,
     private val onNavigateToGallery: () -> Unit
 ) {
     var lensFacing: Int = CameraSelector.LENS_FACING_BACK
@@ -156,10 +155,12 @@ internal class CameraAgentCommandHandler(
             }
             is AiAgentCommand.NavigateTo -> {
                 when (cmd.destination.lowercase()) {
-                    "settings" -> onNavigateToSettings()
                     "gallery" -> onNavigateToGallery()
                     "debug" -> { }
-                    "model_center" -> onNavigateToSettings()
+                    "settings", "model_center" -> {
+                        // 相机页不再提供设置入口，相关导航指令暂忽略
+                        Logger.w(TAG, "Navigation to ${cmd.destination} is not available from camera")
+                    }
                     else -> Logger.w(TAG, "Unknown navigation destination: ${cmd.destination}")
                 }
             }

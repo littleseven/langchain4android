@@ -319,7 +319,6 @@ private fun resolvePreviewTargetView(
 @Composable
 fun CameraScreen(
     onNavigateToGallery: () -> Unit,
-    onNavigateToSettings: () -> Unit,
     onNavigateBack: () -> Unit = {},
     viewModel: MediaViewModel,
     settingsViewModel: SettingsViewModel? = null
@@ -365,7 +364,6 @@ fun CameraScreen(
         CameraContent(
             viewModel = viewModel,
             onNavigateToGallery = onNavigateToGallery,
-            onNavigateToSettings = onNavigateToSettings,
             onNavigateBack = onNavigateBack,
             settingsViewModel = settingsViewModel
         )
@@ -420,7 +418,6 @@ fun CameraScreen(
 fun CameraContent(
     viewModel: MediaViewModel,
     onNavigateToGallery: () -> Unit,
-    onNavigateToSettings: () -> Unit,
     onNavigateBack: () -> Unit = {},
     settingsViewModel: SettingsViewModel? = null
 ) {
@@ -1086,7 +1083,7 @@ voiceCoordinator.stopPushToTalk()
     val agentCommandHandler = remember(
         context, viewModel, imageProcessor, beautyVideoRecorder,
         glPreviewProvider, videoCapture, cameraStateManager, coroutineScope,
-        onNavigateToSettings, onNavigateToGallery
+        onNavigateToGallery
     ) {
         CameraAgentCommandHandler(
             context = context,
@@ -1097,7 +1094,6 @@ voiceCoordinator.stopPushToTalk()
             videoCapture = videoCapture,
             cameraStateManager = cameraStateManager,
             coroutineScope = coroutineScope,
-            onNavigateToSettings = onNavigateToSettings,
             onNavigateToGallery = onNavigateToGallery
         )
     }
@@ -1626,7 +1622,6 @@ CameraPreviewContent(
             actions = run {
                 val currentView = LocalView.current
                 buildCameraPreviewActions(
-                onNavigateToSettings = onNavigateToSettings,
                 onNavigateBack = onNavigateBack,
                 onResetCameraMemoryState = {
                     val defaultState = CameraMemoryState()

@@ -38,11 +38,13 @@ di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 | `Chat` | `chat` | 二级页 — AI 对话主页，模型切换；顶部栏提供返回相册按钮 |
 | `Camera` | `camera` | 辅助入口 — 拍照、美颜预览、语音控制 |
 | `Editor` | `editor` | 图片编辑 — 美颜调节、滤镜、风格特效（当前未注册在 NavHost，从相册/MediaPager 进入） |
-| `Settings` | `settings` | 设置 — 模型管理、语音、远程配置、相册功能、调试 |
+| `Settings` | `settings` | 设置 — 主菜单，展示 6 个分类入口 |
+| `SettingsCategory` | `settings/{category}` | 设置二级分类页 — `personalization`、`ai_agent`、`gallery`、`camera_beauty`、`system`、`developer` |
 | `DuplicateManager` | `duplicate_manager` | 相册功能子页 — 重复/相似照片扫描与删除，从 Settings「相册功能」卡片进入 |
 | `Debug` | `debug` | 开发工具 — 日志、截图、样本数据生成 |
 
-> **2026-06 产品重心转移**：Gallery 为默认首页，Camera/Chat/ModelCenter 作为纯图标入口从 Gallery 底部悬浮 Tab 进入，Settings 从顶部栏进入；Model Center 内置于 Settings 的 AI 助手卡片第一项，分类按服务功能（必须/聊天/相册打标/美颜相机）重排，聊天分类聚合文字与语音模型，并提供必须模型一键下载；重复照片管理内置于 Settings 的相册功能卡片；Camera 降级为辅助入口。详见 `PRODUCT.md`。
+> **2026-06 产品重心转移**：Gallery 为默认首页，Camera/Chat/ModelCenter 作为纯图标入口从 Gallery 底部悬浮 Tab 进入，Settings 从顶部栏进入；设置页已拆分为 6 个二级分类页，主菜单保持一屏可见；Model Center 内置于 Settings 的 AI 助手卡片第一项，分类按服务功能（必须/聊天/相册打标/美颜相机）重排，聊天分类聚合文字与语音模型，并提供必须模型一键下载；重复照片管理内置于 Settings 的相册功能卡片；Camera 页已移除设置入口。
+> - **16 KB 适配**：MediaPipe tasks-vision 升级至 0.10.26，sherpa-onnx 升级至 1.13.3（内置 ONNX Runtime 1.24.3），`onnxruntime-android` 同步升级至 1.24.3，上述 native lib 均已 16 KB 对齐，满足 Google Play Android 15+ 要求。详见 `PRODUCT.md`。
 
 ### 1.3 关键入口文件
 

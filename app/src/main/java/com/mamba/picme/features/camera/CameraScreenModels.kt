@@ -122,7 +122,6 @@ internal data class CameraPreviewUiState(
 )
 
 internal data class CameraPreviewActions(
-    val onNavigateToSettings: () -> Unit,
     val onResetCameraMemoryState: () -> Unit,
     val onNavigateToDebug: () -> Unit,
     val onFlipCamera: () -> Unit,
@@ -247,7 +246,6 @@ internal fun buildCameraPreviewUiState(
 }
 
 internal fun buildCameraPreviewActions(
-    onNavigateToSettings: () -> Unit,
     onResetCameraMemoryState: () -> Unit,
     lensFacing: Int,
     onLensFacingChanged: (Int) -> Unit,
@@ -275,7 +273,6 @@ internal fun buildCameraPreviewActions(
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onResetCameraMemoryState = onResetCameraMemoryState,
-        onNavigateToSettings = onNavigateToSettings,
         onNavigateToDebug = {},
         onNavigateBack = onNavigateBack,
         onFlipCamera = {

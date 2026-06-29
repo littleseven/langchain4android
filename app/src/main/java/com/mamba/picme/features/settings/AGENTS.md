@@ -141,12 +141,40 @@
   - 进入时自动调用 `startDuplicateScan()` 扫描重复/相似照片
   - 顶部栏提供「返回」和「删除全部重复」操作
   - 通过系统返回键或顶部返回按钮退出，返回到 Settings 页
+- **TAG 生成控制**：点击后导航到 `TagGenerationControlScreen`
+  - 支持按类别 / 时间范围重新生成 TAG
+  - 提供 3-Pass 打标进度控制
 
 **实现约定**：
 - 相册功能卡片对所有构建类型可见（非 Debug 限定）
+- Debug 构建额外显示「相册调试功能」区域（图片下载页、搜索测试、OpenCL 后端切换）
 - 图标统一使用 `SettingsClickableRow` 的 `leadingIcon` + 右侧箭头，保持可点击心智
 
-### 2.8 Agent 集成（2026-05 新增）
+### 2.8 设置页二级分类（2026-06 拆分）
+
+**目标**：解决设置页内容过多、单屏无法看完的问题，主菜单一屏可见，功能分组进入二级页。
+
+**分类枚举**：`SettingsCategory`
+- `MAIN` — 设置主菜单，6 个分类卡片 + 重复照片快速入口
+- `PERSONALIZATION` — 主题、语言
+- `AI_AGENT` — 模型中心、Agent 模式、飞书通信通道、语音交互
+- `GALLERY` — 重复照片管理、TAG 生成控制、Debug 相册调试工具
+- `CAMERA_BEAUTY` — ROI / Landmark 阶段配置、高级人脸检测选项
+- `SYSTEM` — 悬浮窗 AI 聊天气泡、电池优化与 MIUI 权限
+- `DEVELOPER` — Debug 总开关、相机/人脸/日志浮层、Shader 调试、日志模块
+
+**导航实现**
+- 路由：`Screen.Settings.route = "settings/{category}"`，`category` 默认空字符串对应主菜单
+- `MainActivity.kt` 解析 `category` 参数并映射到 `SettingsCategory`
+- 主菜单点击卡片后 `onNavigateToCategory` 调用 `navController.navigate("settings/${category.name.lowercase()}")`
+- 所有二级页共用同一个 `SettingsScreen` Composable，通过 `category` 条件渲染对应区块
+
+**UI 约定**
+- 主菜单使用 2 列卡片网格（3 行，一屏可显示完）
+- 每个分类卡片包含：图标、标题、两行描述
+- 重复照片管理在主菜单底部以单行可点击入口形式保留，方便从相册迁移后的老用户习惯
+
+### 2.9 Agent 集成（2026-05 新增）
 
 **SettingsAgentIntegration**
 - 通过 `SettingsCapability` 绑定到 `CapabilityRegistry`

@@ -53,6 +53,7 @@ import com.mamba.picme.features.gallery.components.DuplicateManagerRoute
 import com.mamba.picme.features.gallery.components.TagGenerationControlScreen
 import com.mamba.picme.features.translation.SentencePieceTestScreen
 import com.mamba.picme.features.settings.ModelCenterScreen
+import com.mamba.picme.features.settings.SettingsCategory
 import com.mamba.picme.features.settings.SettingsScreen
 import com.mamba.picme.features.settings.SettingsViewModel
 import com.mamba.picme.features.settings.SettingsViewModelFactory
@@ -214,7 +215,6 @@ class MainActivity : ComponentActivity() {
                                 }
                                 CameraScreen(
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route, navOptions { launchSingleTop = true }) },
-                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) },
                                     onNavigateBack = { navController.popBackStack() },
                                     viewModel = mediaViewModel,
                                     settingsViewModel = settingsViewModel
@@ -252,7 +252,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable(Screen.Settings.route) {
-                                // 场景管理：进入 Settings 页面
+                                // 场景管理：进入 Settings 主页面
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
                                     onDispose {
@@ -261,6 +261,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 SettingsScreen(
                                     viewModel = settingsViewModel,
+                                    category = SettingsCategory.MAIN,
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToModelCenter = { categoryTag ->
                                         navController.navigate(Screen.ModelCenter.createRoute(categoryTag), navOptions { launchSingleTop = true })
@@ -276,6 +277,55 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onNavigateToSearchTest = {
                                         navController.navigate(Screen.SearchTest.route, navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToCategory = { target ->
+                                        navController.navigate(Screen.SettingsCategory.createRoute(target.name.lowercase()), navOptions { launchSingleTop = true })
+                                    }
+                                )
+                            }
+                            composable(
+                                route = Screen.SettingsCategory.route,
+                                arguments = listOf(
+                                    navArgument("category") {
+                                        type = NavType.StringType
+                                        defaultValue = ""
+                                    }
+                                )
+                            ) { backStackEntry ->
+                                // 场景管理：进入 Settings 二级分类页
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
+                                    onDispose {
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.SETTINGS)
+                                    }
+                                }
+                                val categoryArg = backStackEntry.arguments?.getString("category") ?: ""
+                                val category = try {
+                                    SettingsCategory.valueOf(categoryArg.uppercase())
+                                } catch (_: IllegalArgumentException) {
+                                    SettingsCategory.MAIN
+                                }
+                                SettingsScreen(
+                                    viewModel = settingsViewModel,
+                                    category = category,
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToModelCenter = { categoryTag ->
+                                        navController.navigate(Screen.ModelCenter.createRoute(categoryTag), navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToTagControl = {
+                                        navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToDuplicateManager = {
+                                        navController.navigate(Screen.DuplicateManager.route, navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToDebug = {
+                                        navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToSearchTest = {
+                                        navController.navigate(Screen.SearchTest.route, navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToCategory = { target ->
+                                        navController.navigate(Screen.SettingsCategory.createRoute(target.name.lowercase()), navOptions { launchSingleTop = true })
                                     }
                                 )
                             }

@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,16 +13,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.Label
+import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Label
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.SmartToy
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,7 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -44,12 +49,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -82,17 +86,32 @@ import com.mamba.picme.util.permission.BatteryOptimizationUtils
 import com.mamba.picme.util.permission.MiuiPermissionUtils
 import kotlinx.coroutines.delay
 
+/**
+ * 设置页分类，用于主菜单与二级页切换
+ */
+enum class SettingsCategory {
+    MAIN,           // 设置主菜单
+    PERSONALIZATION,// 个性化
+    AI_AGENT,       // AI 助手
+    GALLERY,        // 相册功能
+    CAMERA_BEAUTY,  // 相机与美颜
+    SYSTEM,         // 系统与权限
+    DEVELOPER       // 开发者选项
+}
+
 private const val TAG = "Settings"
 
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    category: SettingsCategory = SettingsCategory.MAIN,
     onNavigateBack: () -> Unit,
     onNavigateToModelCenter: (String) -> Unit = {},
     onNavigateToTagControl: () -> Unit = {},
     onNavigateToDuplicateManager: () -> Unit = {},
     onNavigateToDebug: () -> Unit = {},
-    onNavigateToSearchTest: () -> Unit = {}
+    onNavigateToSearchTest: () -> Unit = {},
+    onNavigateToCategory: (SettingsCategory) -> Unit = {}
 ) {
     val view = LocalView.current
     val context = LocalContext.current
@@ -221,6 +240,7 @@ fun SettingsScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         SettingsContent(
+            category = category,
             themeMode = themeMode,
             appLanguage = appLanguage,
             debugUiEnabled = debugUiEnabled,
@@ -271,6 +291,7 @@ fun SettingsScreen(
             onLocalKwsModelChange = { viewModel.setLocalKwsModel(it) },
             onNavigateToModelCenter = onNavigateToModelCenter,
             onNavigateToDuplicateManager = onNavigateToDuplicateManager,
+            onNavigateToCategory = onNavigateToCategory,
             isModelDownloaded = viewModel::isModelDownloaded,
             getModelId = viewModel::getModelId,
             downloadModel = viewModel::downloadModel,
@@ -299,6 +320,7 @@ fun SettingsScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsContent(
+    category: SettingsCategory,
     themeMode: ThemeMode,
     appLanguage: AppLanguage,
     debugUiEnabled: Boolean,
@@ -349,6 +371,7 @@ private fun SettingsContent(
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onNavigateToModelCenter: (String) -> Unit,
     onNavigateToDuplicateManager: () -> Unit = {},
+    onNavigateToCategory: (SettingsCategory) -> Unit = {},
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
     downloadModel: (String, ModelConfig) -> Unit,
@@ -365,10 +388,20 @@ private fun SettingsContent(
     onNavigateToDebug: () -> Unit = {},
     onNavigateToSearchTest: () -> Unit = {}
 ) {
+    val titleRes = when (category) {
+        SettingsCategory.MAIN -> R.string.settings
+        SettingsCategory.PERSONALIZATION -> R.string.personalization
+        SettingsCategory.AI_AGENT -> R.string.ai_assistant
+        SettingsCategory.GALLERY -> R.string.gallery_features
+        SettingsCategory.CAMERA_BEAUTY -> R.string.camera_and_beauty
+        SettingsCategory.SYSTEM -> R.string.system_and_permissions
+        SettingsCategory.DEVELOPER -> R.string.developer_options
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.settings)) },
+                title = { Text(stringResource(titleRes)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -387,416 +420,563 @@ private fun SettingsContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
+            if (category == SettingsCategory.MAIN) {
+                SettingsMainMenu(
+                    onNavigateToCategory = onNavigateToCategory,
+                    onNavigateToDuplicateManager = onNavigateToDuplicateManager
+                )
+                return@Column
+            }
+
             // ── 1. 个性化 ─────────────────────────────────────────
-            SettingsSection(
-                title = stringResource(R.string.theme_mode),
-                description = stringResource(R.string.settings_theme_mode_desc)
-            ) {
-                ThemeSelection(
-                    currentMode = themeMode,
-                    onModeSelected = onThemeModeSelected
-                )
-            }
-
-            SettingsSection(
-                title = stringResource(R.string.language),
-                description = stringResource(R.string.settings_language_desc)
-            ) {
-                LanguageSelection(
-                    currentLanguage = appLanguage,
-                    onLanguageSelected = onAppLanguageSelected
-                )
-            }
-
-            // ── 2. AI 助手（核心功能，高亮）────────────────────────
-            SettingsSection(
-                title = stringResource(R.string.ai_agent),
-                description = stringResource(R.string.ai_agent_desc)
-            ) {
-                // 模型中心作为 AI 助手卡片第一项
-                SettingsClickableRow(
-                    title = stringResource(R.string.model_center),
-                    subtitle = stringResource(R.string.model_center_desc),
-                    leadingIcon = Icons.Rounded.SmartToy,
-                    onClick = { onNavigateToModelCenter("") }
-                )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
-
-                var autoExecutePlans by remember { mutableStateOf(true) }
-                DebugOptionRow(
-                    title = stringResource(R.string.ai_agent_auto_execute_plans),
-                    checked = autoExecutePlans,
-                    onCheckedChange = { autoExecutePlans = it }
-                )
-                Text(
-                    text = stringResource(R.string.ai_agent_auto_execute_plans_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                )
-
-                AiAgentModeSelection(
-                    currentMode = aiAgentMode,
-                    onModeSelected = onAiAgentModeChange
-                )
-
-                // 推理偏好选择（仅 LOCAL 模式下显示）
-                if (aiAgentMode == AiAgentMode.LOCAL) {
-                    InferencePreferenceSelection(
-                        currentPreference = aiAgentInferencePreference,
-                        onPreferenceSelected = onAiAgentInferencePreferenceChange
-                    )
-                    OpenClBackendSelection(
-                        useOpencl = aiAgentLocalUseOpencl,
-                        onToggle = onAiAgentLocalUseOpenclChange
-                    )
-                }
-
-                when (aiAgentMode) {
-                    AiAgentMode.OFF -> {
-                        Text(
-                            text = stringResource(R.string.ai_agent_mode_off),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    AiAgentMode.LOCAL -> {
-                        AiAgentLocalModelSection(
-                            currentLocalModel = aiAgentLocalModel,
-                            onLocalModelSelected = onAiAgentLocalModelChange,
-                            onNavigateToModelManager = onNavigateToModelCenter
-                        )
-                    }
-                    AiAgentMode.REMOTE, AiAgentMode.FEISHU -> {
-                        AiAgentRemoteModelsSection(
-                            configsJson = aiAgentRemoteModelConfigs,
-                            onConfigsChange = onAiAgentRemoteModelConfigsChange,
-                            selectedModelId = aiAgentSelectedRemoteModel,
-                            onSelectedModelChange = onAiAgentSelectedRemoteModelChange
-                        )
-                    }
-                }
-
-                DebugOptionRow(
-                    title = stringResource(R.string.ai_agent_l1_cache),
-                    checked = aiAgentL1CacheEnabled,
-                    onCheckedChange = onAiAgentL1CacheEnabledChange
-                )
-                Text(
-                    text = stringResource(R.string.ai_agent_l1_cache_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                )
-            }
-
-            // ── 3. 相册功能 ───────────────────────────────────────
-            SettingsSection(
-                title = stringResource(R.string.gallery_features),
-                description = stringResource(R.string.gallery_features_desc)
-            ) {
-                SettingsClickableRow(
-                    title = stringResource(R.string.manage_duplicates),
-                    subtitle = stringResource(R.string.duplicate_manager_desc),
-                    leadingIcon = Icons.Rounded.ContentCopy,
-                    onClick = onNavigateToDuplicateManager
-                )
-            }
-
-            // ── 4. 通信通道 ───────────────────────────────────────
-            SettingsSection(
-                title = stringResource(R.string.communication_channel),
-                description = stringResource(R.string.communication_channel_desc)
-            ) {
-                Text(
-                    text = stringResource(R.string.feishu_channel_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-                SettingsTextInputRow(
-                    title = "App ID",
-                    value = feishuAppId,
-                    onValueChange = onFeishuAppIdChange,
-                    placeholder = "飞书应用的 App ID"
-                )
-                SettingsTextInputRow(
-                    title = "App Secret",
-                    value = feishuAppSecret,
-                    onValueChange = onFeishuAppSecretChange,
-                    placeholder = "飞书应用的 App Secret",
-                    isPassword = true
-                )
-            }
-
-            // ── 5. 语音交互 ───────────────────────────────────────
-            SettingsSection(
-                title = stringResource(R.string.voice_control),
-                description = stringResource(R.string.voice_control_desc)
-            ) {
-                VoiceCommandModeSelection(
-                    currentMode = voiceCommandMode,
-                    onModeSelected = onVoiceCommandModeChange
-                )
-
-                if (voiceCommandMode != VoiceCommandMode.DISABLED) {
-                    LocalAsrModelSelection(
-                        currentModel = localAsrModel,
-                        onModelSelected = onLocalAsrModelChange,
-                        onNavigateToModelCenter = onNavigateToModelCenter
-                    )
-
-                    LocalKwsModelSelection(
-                        currentModel = localKwsModel,
-                        onModelSelected = onLocalKwsModelChange,
-                        onNavigateToModelCenter = onNavigateToModelCenter
-                    )
-                }
-            }
-
-            // ── 6. 相册调试功能（仅 Debug 构建）────────────────────────
-            if (BuildConfig.DEBUG) {
+            if (category == SettingsCategory.PERSONALIZATION) {
                 SettingsSection(
-                    title = "相册调试功能",
-                    description = "测试工具与后端模式切换"
+                    title = stringResource(R.string.theme_mode),
+                    description = stringResource(R.string.settings_theme_mode_desc)
                 ) {
+                    ThemeSelection(
+                        currentMode = themeMode,
+                        onModeSelected = onThemeModeSelected
+                    )
+                }
+
+                SettingsSection(
+                    title = stringResource(R.string.language),
+                    description = stringResource(R.string.settings_language_desc)
+                ) {
+                    LanguageSelection(
+                        currentLanguage = appLanguage,
+                        onLanguageSelected = onAppLanguageSelected
+                    )
+                }
+            }
+
+            // ── 2. AI 助手 ────────────────────────────────────────
+            if (category == SettingsCategory.AI_AGENT) {
+                SettingsSection(
+                    title = stringResource(R.string.ai_agent),
+                    description = stringResource(R.string.ai_agent_desc)
+                ) {
+                    // 模型中心作为 AI 助手卡片第一项
                     SettingsClickableRow(
-                        title = "图片下载页",
-                        subtitle = "测试数据生成与图片下载",
-                        valueText = "进入",
-                        onClick = onNavigateToDebug
+                        title = stringResource(R.string.model_center),
+                        subtitle = stringResource(R.string.model_center_desc),
+                        leadingIcon = Icons.Rounded.SmartToy,
+                        onClick = { onNavigateToModelCenter("") }
                     )
 
-                    SettingsClickableRow(
-                        title = stringResource(R.string.search_test_entry_title),
-                        subtitle = stringResource(R.string.search_test_entry_subtitle),
-                        valueText = stringResource(R.string.enter),
-                        onClick = onNavigateToSearchTest
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OpenClBackendSelection(
-                        useOpencl = tagGenerationUseOpencl,
-                        onToggle = onTagGenerationUseOpenclChange,
-                        title = stringResource(R.string.tag_gen_use_opencl_title)
+                    var autoExecutePlans by remember { mutableStateOf(true) }
+                    DebugOptionRow(
+                        title = stringResource(R.string.ai_agent_auto_execute_plans),
+                        checked = autoExecutePlans,
+                        onCheckedChange = { autoExecutePlans = it }
                     )
                     Text(
-                        text = stringResource(R.string.tag_gen_use_opencl_desc),
+                        text = stringResource(R.string.ai_agent_auto_execute_plans_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+
+                    AiAgentModeSelection(
+                        currentMode = aiAgentMode,
+                        onModeSelected = onAiAgentModeChange
+                    )
+
+                    // 推理偏好选择（仅 LOCAL 模式下显示）
+                    if (aiAgentMode == AiAgentMode.LOCAL) {
+                        InferencePreferenceSelection(
+                            currentPreference = aiAgentInferencePreference,
+                            onPreferenceSelected = onAiAgentInferencePreferenceChange
+                        )
+                        OpenClBackendSelection(
+                            useOpencl = aiAgentLocalUseOpencl,
+                            onToggle = onAiAgentLocalUseOpenclChange
+                        )
+                    }
+
+                    when (aiAgentMode) {
+                        AiAgentMode.OFF -> {
+                            Text(
+                                text = stringResource(R.string.ai_agent_mode_off),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+                        AiAgentMode.LOCAL -> {
+                            AiAgentLocalModelSection(
+                                currentLocalModel = aiAgentLocalModel,
+                                onLocalModelSelected = onAiAgentLocalModelChange,
+                                onNavigateToModelManager = onNavigateToModelCenter
+                            )
+                        }
+                        AiAgentMode.REMOTE, AiAgentMode.FEISHU -> {
+                            AiAgentRemoteModelsSection(
+                                configsJson = aiAgentRemoteModelConfigs,
+                                onConfigsChange = onAiAgentRemoteModelConfigsChange,
+                                selectedModelId = aiAgentSelectedRemoteModel,
+                                onSelectedModelChange = onAiAgentSelectedRemoteModelChange
+                            )
+                        }
+                    }
+
+                    DebugOptionRow(
+                        title = stringResource(R.string.ai_agent_l1_cache),
+                        checked = aiAgentL1CacheEnabled,
+                        onCheckedChange = onAiAgentL1CacheEnabledChange
+                    )
+                    Text(
+                        text = stringResource(R.string.ai_agent_l1_cache_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                     )
                 }
-            }
 
-            // ── 7. 美颜引擎 ─────────────────────────────────────
-            StageConfigSection(
-                stage = DetectionStage.ROI,
-                config = roiStageConfig,
-                onModelTypeSelected = onRoiModelTypeSelected,
-                onDevicePreferenceSelected = onRoiDevicePreferenceSelected,
-                onNavigateToModelManager = onNavigateToModelCenter,
-                isModelDownloaded = isModelDownloaded,
-                getModelId = getModelId,
-                downloadModel = downloadModel,
-                downloadStates = downloadStates,
-                allModels = allModels
-            )
-
-            StageConfigSection(
-                stage = DetectionStage.LANDMARK,
-                config = landmarkStageConfig,
-                onModelTypeSelected = onLandmarkModelTypeSelected,
-                onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected,
-                onNavigateToModelManager = onNavigateToModelCenter,
-                isModelDownloaded = isModelDownloaded,
-                getModelId = getModelId,
-                downloadModel = downloadModel,
-                downloadStates = downloadStates,
-                allModels = allModels
-            )
-
-            SettingsSection(
-                title = stringResource(R.string.face_detection_advanced),
-                description = stringResource(R.string.settings_face_detection_advanced_desc)
-            ) {
-                DebugOptionRow(
-                    title = stringResource(R.string.face_landmark_mode),
-                    checked = faceDetectionLandmarkModeEnabled,
-                    onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
-                )
-                DebugOptionRow(
-                    title = stringResource(R.string.adaptive_face_detect_interval),
-                    checked = adaptiveFaceDetectionIntervalEnabled,
-                    onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
-                )
-                if (adaptiveFaceDetectionIntervalEnabled) {
-                    FaceDetectProfileSelection(
-                        currentProfile = faceDetectIntervalProfile,
-                        onProfileSelected = onFaceDetectIntervalProfileSelected
+                SettingsSection(
+                    title = stringResource(R.string.communication_channel),
+                    description = stringResource(R.string.communication_channel_desc)
+                ) {
+                    Text(
+                        text = stringResource(R.string.feishu_channel_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                    SettingsTextInputRow(
+                        title = "App ID",
+                        value = feishuAppId,
+                        onValueChange = onFeishuAppIdChange,
+                        placeholder = "飞书应用的 App ID"
+                    )
+                    SettingsTextInputRow(
+                        title = "App Secret",
+                        value = feishuAppSecret,
+                        onValueChange = onFeishuAppSecretChange,
+                        placeholder = "飞书应用的 App Secret",
+                        isPassword = true
                     )
                 }
-            }
 
-            // ── 8. 系统与权限 ─────────────────────────────────────
-            val context = LocalContext.current
-            var isFloatingChatRunning by remember {
-                mutableStateOf(FloatingChatBubbleService.isRunning(context))
-            }
-            var hasOverlayPermission by remember {
-                mutableStateOf(FloatingChatBubbleService.canDrawOverlays(context))
-            }
-            val overlayPermissionLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.StartActivityForResult()
-            ) {
-                hasOverlayPermission = FloatingChatBubbleService.canDrawOverlays(context)
-                if (hasOverlayPermission && !isFloatingChatRunning) {
-                    FloatingChatBubbleService.start(context)
-                    isFloatingChatRunning = true
+                SettingsSection(
+                    title = stringResource(R.string.voice_control),
+                    description = stringResource(R.string.voice_control_desc)
+                ) {
+                    VoiceCommandModeSelection(
+                        currentMode = voiceCommandMode,
+                        onModeSelected = onVoiceCommandModeChange
+                    )
+
+                    if (voiceCommandMode != VoiceCommandMode.DISABLED) {
+                        LocalAsrModelSelection(
+                            currentModel = localAsrModel,
+                            onModelSelected = onLocalAsrModelChange,
+                            onNavigateToModelCenter = onNavigateToModelCenter
+                        )
+
+                        LocalKwsModelSelection(
+                            currentModel = localKwsModel,
+                            onModelSelected = onLocalKwsModelChange,
+                            onNavigateToModelCenter = onNavigateToModelCenter
+                        )
+                    }
                 }
             }
 
-            LaunchedEffect(Unit) {
-                while (true) {
-                    isFloatingChatRunning = FloatingChatBubbleService.isRunning(context)
+            // ── 3. 相册功能 ───────────────────────────────────────
+            if (category == SettingsCategory.GALLERY) {
+                SettingsSection(
+                    title = stringResource(R.string.gallery_features),
+                    description = stringResource(R.string.gallery_features_desc)
+                ) {
+                    SettingsClickableRow(
+                        title = stringResource(R.string.manage_duplicates),
+                        subtitle = stringResource(R.string.duplicate_manager_desc),
+                        leadingIcon = Icons.Rounded.ContentCopy,
+                        onClick = onNavigateToDuplicateManager
+                    )
+
+                    SettingsClickableRow(
+                        title = stringResource(R.string.tag_control_title),
+                        subtitle = stringResource(R.string.tag_control_subtitle),
+                        leadingIcon = Icons.AutoMirrored.Rounded.Label,
+                        onClick = onNavigateToTagControl
+                    )
+                }
+
+                if (BuildConfig.DEBUG) {
+                    SettingsSection(
+                        title = stringResource(R.string.gallery_debug_features),
+                        description = stringResource(R.string.gallery_debug_features_desc)
+                    ) {
+                        SettingsClickableRow(
+                            title = stringResource(R.string.debug_image_download),
+                            subtitle = stringResource(R.string.debug_image_download_desc),
+                            valueText = stringResource(R.string.enter),
+                            onClick = onNavigateToDebug
+                        )
+
+                        SettingsClickableRow(
+                            title = stringResource(R.string.search_test_entry_title),
+                            subtitle = stringResource(R.string.search_test_entry_subtitle),
+                            valueText = stringResource(R.string.enter),
+                            onClick = onNavigateToSearchTest
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OpenClBackendSelection(
+                            useOpencl = tagGenerationUseOpencl,
+                            onToggle = onTagGenerationUseOpenclChange,
+                            title = stringResource(R.string.tag_gen_use_opencl_title)
+                        )
+                        Text(
+                            text = stringResource(R.string.tag_gen_use_opencl_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            // ── 4. 相机与美颜 ─────────────────────────────────────
+            if (category == SettingsCategory.CAMERA_BEAUTY) {
+                StageConfigSection(
+                    stage = DetectionStage.ROI,
+                    config = roiStageConfig,
+                    onModelTypeSelected = onRoiModelTypeSelected,
+                    onDevicePreferenceSelected = onRoiDevicePreferenceSelected,
+                    onNavigateToModelManager = onNavigateToModelCenter,
+                    isModelDownloaded = isModelDownloaded,
+                    getModelId = getModelId,
+                    downloadModel = downloadModel,
+                    downloadStates = downloadStates,
+                    allModels = allModels
+                )
+
+                StageConfigSection(
+                    stage = DetectionStage.LANDMARK,
+                    config = landmarkStageConfig,
+                    onModelTypeSelected = onLandmarkModelTypeSelected,
+                    onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected,
+                    onNavigateToModelManager = onNavigateToModelCenter,
+                    isModelDownloaded = isModelDownloaded,
+                    getModelId = getModelId,
+                    downloadModel = downloadModel,
+                    downloadStates = downloadStates,
+                    allModels = allModels
+                )
+
+                SettingsSection(
+                    title = stringResource(R.string.face_detection_advanced),
+                    description = stringResource(R.string.settings_face_detection_advanced_desc)
+                ) {
+                    DebugOptionRow(
+                        title = stringResource(R.string.face_landmark_mode),
+                        checked = faceDetectionLandmarkModeEnabled,
+                        onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
+                    )
+                    DebugOptionRow(
+                        title = stringResource(R.string.adaptive_face_detect_interval),
+                        checked = adaptiveFaceDetectionIntervalEnabled,
+                        onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
+                    )
+                    if (adaptiveFaceDetectionIntervalEnabled) {
+                        FaceDetectProfileSelection(
+                            currentProfile = faceDetectIntervalProfile,
+                            onProfileSelected = onFaceDetectIntervalProfileSelected
+                        )
+                    }
+                }
+            }
+
+            // ── 5. 系统与权限 ─────────────────────────────────────
+            if (category == SettingsCategory.SYSTEM) {
+                val context = LocalContext.current
+                var isFloatingChatRunning by remember {
+                    mutableStateOf(FloatingChatBubbleService.isRunning(context))
+                }
+                var hasOverlayPermission by remember {
+                    mutableStateOf(FloatingChatBubbleService.canDrawOverlays(context))
+                }
+                val overlayPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) {
                     hasOverlayPermission = FloatingChatBubbleService.canDrawOverlays(context)
-                    delay(1000)
+                    if (hasOverlayPermission && !isFloatingChatRunning) {
+                        FloatingChatBubbleService.start(context)
+                        isFloatingChatRunning = true
+                    }
                 }
-            }
 
-            SettingsSection(
-                title = stringResource(R.string.floating_chat_title),
-                description = stringResource(R.string.floating_chat_summary)
-            ) {
-                SettingsClickableRow(
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        isFloatingChatRunning = FloatingChatBubbleService.isRunning(context)
+                        hasOverlayPermission = FloatingChatBubbleService.canDrawOverlays(context)
+                        delay(1000)
+                    }
+                }
+
+                SettingsSection(
                     title = stringResource(R.string.floating_chat_title),
-                    subtitle = stringResource(R.string.floating_chat_summary),
-                    valueText = stringResource(
-                        if (isFloatingChatRunning) R.string.floating_chat_enabled else R.string.floating_chat_disabled
-                    ),
-                    onClick = {
-                        when {
-                            !hasOverlayPermission -> {
-                                overlayPermissionLauncher.launch(
-                                    FloatingChatBubbleService.openOverlayPermissionSettingsIntent(context)
-                                )
-                            }
-                            isFloatingChatRunning -> {
-                                FloatingChatBubbleService.stop(context)
-                                isFloatingChatRunning = false
-                            }
-                            else -> {
-                                FloatingChatBubbleService.start(context)
-                                isFloatingChatRunning = true
-                            }
-                        }
-                    }
-                )
-            }
-
-            var isIgnoringBatteryOptimizations by remember {
-                mutableStateOf(BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context))
-            }
-            val isMiui = remember { MiuiPermissionUtils.isMiui() }
-
-            LaunchedEffect(Unit) {
-                while (true) {
-                    isIgnoringBatteryOptimizations =
-                        BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context)
-                    delay(1000)
-                }
-            }
-
-            SettingsSection(
-                title = stringResource(R.string.settings_background_permission_title),
-                description = stringResource(R.string.settings_background_permission_summary)
-            ) {
-                SettingsClickableRow(
-                    title = stringResource(R.string.settings_battery_optimization_title),
-                    subtitle = stringResource(R.string.settings_battery_optimization_summary),
-                    valueText = stringResource(
-                        if (isIgnoringBatteryOptimizations) {
-                            R.string.settings_battery_optimization_enabled
-                        } else {
-                            R.string.settings_battery_optimization_disabled
-                        }
-                    ),
-                    onClick = {
-                        if (!isIgnoringBatteryOptimizations) {
-                            BatteryOptimizationUtils.requestIgnoreBatteryOptimizations(context)
-                        }
-                    }
-                )
-
-                if (isMiui) {
+                    description = stringResource(R.string.floating_chat_summary)
+                ) {
                     SettingsClickableRow(
-                        title = stringResource(R.string.settings_miui_auto_start_title),
-                        subtitle = stringResource(R.string.settings_miui_auto_start_summary),
-                        valueText = stringResource(R.string.settings_miui_action_open),
-                        onClick = { MiuiPermissionUtils.openMiuiAutoStart(context) }
+                        title = stringResource(R.string.floating_chat_title),
+                        subtitle = stringResource(R.string.floating_chat_summary),
+                        valueText = stringResource(
+                            if (isFloatingChatRunning) R.string.floating_chat_enabled else R.string.floating_chat_disabled
+                        ),
+                        onClick = {
+                            when {
+                                !hasOverlayPermission -> {
+                                    overlayPermissionLauncher.launch(
+                                        FloatingChatBubbleService.openOverlayPermissionSettingsIntent(context)
+                                    )
+                                }
+                                isFloatingChatRunning -> {
+                                    FloatingChatBubbleService.stop(context)
+                                    isFloatingChatRunning = false
+                                }
+                                else -> {
+                                    FloatingChatBubbleService.start(context)
+                                    isFloatingChatRunning = true
+                                }
+                            }
+                        }
                     )
+                }
 
+                var isIgnoringBatteryOptimizations by remember {
+                    mutableStateOf(BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context))
+                }
+                val isMiui = remember { MiuiPermissionUtils.isMiui() }
+
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        isIgnoringBatteryOptimizations =
+                            BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context)
+                        delay(1000)
+                    }
+                }
+
+                SettingsSection(
+                    title = stringResource(R.string.settings_background_permission_title),
+                    description = stringResource(R.string.settings_background_permission_summary)
+                ) {
                     SettingsClickableRow(
-                        title = stringResource(R.string.settings_miui_permission_editor_title),
-                        subtitle = stringResource(R.string.settings_miui_permission_editor_summary),
-                        valueText = stringResource(R.string.settings_miui_action_open),
-                        onClick = { MiuiPermissionUtils.openMiuiPermissionEditor(context) }
+                        title = stringResource(R.string.settings_battery_optimization_title),
+                        subtitle = stringResource(R.string.settings_battery_optimization_summary),
+                        valueText = stringResource(
+                            if (isIgnoringBatteryOptimizations) {
+                                R.string.settings_battery_optimization_enabled
+                            } else {
+                                R.string.settings_battery_optimization_disabled
+                            }
+                        ),
+                        onClick = {
+                            if (!isIgnoringBatteryOptimizations) {
+                                BatteryOptimizationUtils.requestIgnoreBatteryOptimizations(context)
+                            }
+                        }
                     )
+
+                    if (isMiui) {
+                        SettingsClickableRow(
+                            title = stringResource(R.string.settings_miui_auto_start_title),
+                            subtitle = stringResource(R.string.settings_miui_auto_start_summary),
+                            valueText = stringResource(R.string.settings_miui_action_open),
+                            onClick = { MiuiPermissionUtils.openMiuiAutoStart(context) }
+                        )
+
+                        SettingsClickableRow(
+                            title = stringResource(R.string.settings_miui_permission_editor_title),
+                            subtitle = stringResource(R.string.settings_miui_permission_editor_summary),
+                            valueText = stringResource(R.string.settings_miui_action_open),
+                            onClick = { MiuiPermissionUtils.openMiuiPermissionEditor(context) }
+                        )
+                    }
                 }
             }
 
-            // ── 9. 开发者选项（默认折叠）──────────────────────────
-            SettingsExpandableSection(
-                title = stringResource(R.string.debug_tools),
-                description = stringResource(R.string.settings_debug_tools_desc),
-                expandedByDefault = debugUiEnabled
-            ) {
-                DebugOptionRow(
-                    title = stringResource(R.string.debug),
-                    checked = debugUiEnabled,
-                    onCheckedChange = onDebugUiEnabledChange
-                )
-                if (debugUiEnabled) {
+            // ── 6. 开发者选项 ─────────────────────────────────────
+            if (category == SettingsCategory.DEVELOPER) {
+                SettingsSection(
+                    title = stringResource(R.string.debug_tools),
+                    description = stringResource(R.string.settings_debug_tools_desc)
+                ) {
                     DebugOptionRow(
-                        title = stringResource(R.string.show_camera_info),
-                        checked = showCameraInfoInPreview,
-                        onCheckedChange = onShowCameraInfoInPreviewChange
+                        title = stringResource(R.string.debug),
+                        checked = debugUiEnabled,
+                        onCheckedChange = onDebugUiEnabledChange
                     )
-                    DebugOptionRow(
-                        title = stringResource(R.string.show_face_debug),
-                        checked = showFaceDebugOverlay,
-                        onCheckedChange = onShowFaceDebugOverlayChange
+                    if (debugUiEnabled) {
+                        DebugOptionRow(
+                            title = stringResource(R.string.show_camera_info),
+                            checked = showCameraInfoInPreview,
+                            onCheckedChange = onShowCameraInfoInPreviewChange
+                        )
+                        DebugOptionRow(
+                            title = stringResource(R.string.show_face_debug),
+                            checked = showFaceDebugOverlay,
+                            onCheckedChange = onShowFaceDebugOverlayChange
+                        )
+                        DebugOptionRow(
+                            title = stringResource(R.string.show_log_overlay),
+                            checked = showLogOverlay,
+                            onCheckedChange = onShowLogOverlayChange
+                        )
+                        ShaderDebugModeSelection(
+                            currentMode = debugShaderMode,
+                            onModeSelected = onDebugShaderModeSelected
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = stringResource(R.string.log_management),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
                     )
-                    DebugOptionRow(
-                        title = stringResource(R.string.show_log_overlay),
-                        checked = showLogOverlay,
-                        onCheckedChange = onShowLogOverlayChange
-                    )
-                    ShaderDebugModeSelection(
-                        currentMode = debugShaderMode,
-                        onModeSelected = onDebugShaderModeSelected
+                    LogModuleConfigSection(
+                        config = logModuleConfig,
+                        onConfigChange = onLogModuleConfigChange
                     )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = stringResource(R.string.log_management),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
-                )
-                LogModuleConfigSection(
-                    config = logModuleConfig,
-                    onConfigChange = onLogModuleConfigChange
-                )
             }
+        }
+    }
+}
+
+@Composable
+private fun SettingsMainMenu(
+    onNavigateToCategory: (SettingsCategory) -> Unit,
+    onNavigateToDuplicateManager: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            SettingsCategoryCard(
+                title = stringResource(R.string.personalization),
+                description = stringResource(R.string.personalization_desc),
+                icon = Icons.Rounded.Palette,
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigateToCategory(SettingsCategory.PERSONALIZATION) }
+            )
+            SettingsCategoryCard(
+                title = stringResource(R.string.ai_assistant),
+                description = stringResource(R.string.ai_assistant_desc),
+                icon = Icons.Rounded.SmartToy,
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigateToCategory(SettingsCategory.AI_AGENT) }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            SettingsCategoryCard(
+                title = stringResource(R.string.gallery_features),
+                description = stringResource(R.string.gallery_features_desc),
+                icon = Icons.Rounded.PhotoLibrary,
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigateToCategory(SettingsCategory.GALLERY) }
+            )
+            SettingsCategoryCard(
+                title = stringResource(R.string.camera_and_beauty),
+                description = stringResource(R.string.camera_and_beauty_desc),
+                icon = Icons.Rounded.CameraAlt,
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigateToCategory(SettingsCategory.CAMERA_BEAUTY) }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            SettingsCategoryCard(
+                title = stringResource(R.string.system_and_permissions),
+                description = stringResource(R.string.system_and_permissions_desc),
+                icon = Icons.Rounded.Storage,
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigateToCategory(SettingsCategory.SYSTEM) }
+            )
+            SettingsCategoryCard(
+                title = stringResource(R.string.developer_options),
+                description = stringResource(R.string.developer_options_desc),
+                icon = Icons.Rounded.Terminal,
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigateToCategory(SettingsCategory.DEVELOPER) }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 快速入口：重复照片管理（从相册页迁移过来）
+        SettingsClickableRow(
+            title = stringResource(R.string.manage_duplicates),
+            subtitle = stringResource(R.string.duplicate_manager_desc),
+            leadingIcon = Icons.Rounded.ContentCopy,
+            onClick = onNavigateToDuplicateManager
+        )
+    }
+}
+
+@Composable
+private fun SettingsCategoryCard(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                minLines = 2,
+                maxLines = 2
+            )
         }
     }
 }
@@ -924,50 +1104,6 @@ private fun LanguageSelection(
 }
 
 @Composable
-private fun TagControlEntry(
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Label,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.tag_control_title),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text = stringResource(R.string.tag_control_subtitle),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                )
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-            )
-        }
-    }
-}
-
-@Composable
 private fun FaceDetectProfileSelection(
     currentProfile: FaceDetectIntervalProfile,
     onProfileSelected: (FaceDetectIntervalProfile) -> Unit
@@ -1027,6 +1163,7 @@ private fun ShaderDebugModeSelection(
 fun SettingsScreenPreview() {
     PicMeTheme {
         SettingsContent(
+            category = SettingsCategory.MAIN,
             themeMode = ThemeMode.SYSTEM,
             appLanguage = AppLanguage.ENGLISH,
             debugUiEnabled = true,

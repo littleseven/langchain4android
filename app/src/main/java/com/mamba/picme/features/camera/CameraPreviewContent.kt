@@ -465,7 +465,6 @@ private fun BoxScope.CameraPreviewSideControls(
     actions: CameraPreviewActions
 ) {
     CameraLeftControls(
-        onNavigateToSettings = actions.onNavigateToSettings,
         onResetCameraMemoryState = actions.onResetCameraMemoryState,
         onToggleLogOverlay = actions.onToggleLogs,
         debugUiEnabled = uiState.debugUiEnabled,

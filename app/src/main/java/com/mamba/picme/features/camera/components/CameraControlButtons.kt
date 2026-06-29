@@ -26,7 +26,6 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -42,7 +41,6 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun CameraLeftControls(
-    onNavigateToSettings: () -> Unit,
     onResetCameraMemoryState: () -> Unit,
     onToggleLogOverlay: () -> Unit,
     debugUiEnabled: Boolean,
@@ -60,7 +58,6 @@ fun CameraLeftControls(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         ControlButton(icon = Icons.AutoMirrored.Rounded.ArrowBack, onClick = onNavigateBack)
-        ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
         ControlButton(icon = Icons.Rounded.Refresh, onClick = onResetCameraMemoryState)
         if (debugUiEnabled) {
             ControlButton(

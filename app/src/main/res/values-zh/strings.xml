@@ -533,4 +533,20 @@
     <string name="no">否</string>
     <string name="clear">清除</string>
     <string name="remove">移除</string>
+
+    <!-- 设置分类 -->
+    <string name="personalization">个性化</string>
+    <string name="personalization_desc">主题、语言与界面偏好。</string>
+    <string name="ai_assistant">AI 助手</string>
+    <string name="ai_assistant_desc">Agent 模式、模型、语音控制与远程通道。</string>
+    <string name="camera_and_beauty">相机与美颜</string>
+    <string name="camera_and_beauty_desc">人脸检测、美颜引擎与相机行为。</string>
+    <string name="system_and_permissions">系统与权限</string>
+    <string name="system_and_permissions_desc">悬浮窗聊天气泡、电池优化与权限设置。</string>
+    <string name="developer_options">开发者选项</string>
+    <string name="developer_options_desc">调试浮层与高级诊断。</string>
+    <string name="gallery_debug_features">相册调试功能</string>
+    <string name="gallery_debug_features_desc">相册功能的测试工具与后端模式切换。</string>
+    <string name="debug_image_download">图片下载页</string>
+    <string name="debug_image_download_desc">测试数据生成与图片下载。</string>
 </resources>

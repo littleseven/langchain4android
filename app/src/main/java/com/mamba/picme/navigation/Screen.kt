@@ -6,6 +6,9 @@ sealed class Screen(val route: String) {
     data object Gallery : Screen("gallery")
     data object TagControl : Screen("tag_control")
     data object Settings : Screen("settings")
+    data object SettingsCategory : Screen("settings/{category}") {
+        fun createRoute(category: String): String = "settings/$category"
+    }
     data object DuplicateManager : Screen("duplicate_manager")
     data object Debug : Screen("debug")
     data object SearchTest : Screen("search_test")

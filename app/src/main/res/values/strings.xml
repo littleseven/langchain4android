@@ -563,4 +563,20 @@
     <string name="no">No</string>
     <string name="clear">Clear</string>
     <string name="remove">Remove</string>
+
+    <!-- Settings Categories -->
+    <string name="personalization">Personalization</string>
+    <string name="personalization_desc">Theme, language and interface preferences.</string>
+    <string name="ai_assistant">AI Assistant</string>
+    <string name="ai_assistant_desc">Agent mode, models, voice control and remote channel.</string>
+    <string name="camera_and_beauty">Camera &amp; Beauty</string>
+    <string name="camera_and_beauty_desc">Face detection, beauty engine and camera behavior.</string>
+    <string name="system_and_permissions">System &amp; Permissions</string>
+    <string name="system_and_permissions_desc">Floating chat, battery optimization and permissions.</string>
+    <string name="developer_options">Developer Options</string>
+    <string name="developer_options_desc">Debug overlays and advanced diagnostics.</string>
+    <string name="gallery_debug_features">Gallery Debug Tools</string>
+    <string name="gallery_debug_features_desc">Test tools and backend toggles for album features.</string>
+    <string name="debug_image_download">Image Download</string>
+    <string name="debug_image_download_desc">Generate test data and download images.</string>
 </resources>
