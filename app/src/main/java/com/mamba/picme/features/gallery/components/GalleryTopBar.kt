@@ -6,13 +6,13 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Sell
 import androidx.compose.material.icons.rounded.SelectAll
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -48,12 +48,12 @@ fun GalleryTopBar(
     selectedCount: Int,
     groupingMode: GroupingMode,
     onNavigateBack: (() -> Unit)? = null,
+    onNavigateToSettings: () -> Unit = {},
     onToggleSelectionMode: () -> Unit,
     onSelectAll: () -> Unit,
     onDeleteSelected: () -> Unit,
     onShareSelected: () -> Unit,
     onGroupingModeSelected: (GroupingMode) -> Unit,
-    onManageDuplicates: () -> Unit,
     onSearchClick: () -> Unit = {},
     onTagScanClick: () -> Unit = {},
     onNavigateToTagControl: () -> Unit = {},
@@ -112,9 +112,6 @@ fun GalleryTopBar(
                         tint = iconTint
                     )
                 }
-                IconButton(onClick = onManageDuplicates) {
-                    Icon(Icons.Rounded.ContentCopy, contentDescription = stringResource(R.string.manage_duplicates))
-                }
                 IconButton(onClick = onSearchClick) {
                     Icon(
                         Icons.Rounded.Search,
@@ -125,6 +122,13 @@ fun GalleryTopBar(
                     currentMode = groupingMode,
                     onModeSelected = onGroupingModeSelected
                 )
+                // 设置入口统一放到顶部栏最右侧
+                IconButton(onClick = onNavigateToSettings) {
+                    Icon(
+                        Icons.Rounded.Settings,
+                        contentDescription = stringResource(R.string.settings)
+                    )
+                }
             }
         }
     )

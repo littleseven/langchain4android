@@ -111,9 +111,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.activity.compose.BackHandler
 import androidx.core.net.toUri
 import com.mamba.picme.features.chat.ChatThreadSidebar
-import com.mamba.picme.features.chat.components.QuickActionBar
-import com.mamba.picme.features.common.components.ExpandableFabMenu
-import com.mamba.picme.features.common.components.ExpandableFabMenuItem
 import com.mamba.picme.data.preferences.UserPreferencesRepository
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import androidx.compose.foundation.text.KeyboardActions
@@ -140,8 +137,6 @@ private const val TAG = "ChatScreen"
 fun ChatScreen(
     viewModel: ChatViewModel = viewModel(),
     onNavigateBack: () -> Unit,
-    onNavigateToCamera: () -> Unit,
-    onNavigateToModelCenter: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -155,7 +150,6 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    var showQuickActions by remember { mutableStateOf(false) }
     var isSidebarOpen by remember { mutableStateOf(false) }
     // 图片预览状态
     var previewImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -234,39 +228,9 @@ fun ChatScreen(
                     },
                     onImagePicked = { uri ->
                         viewModel.sendImageMessage(uri)
-                    },
-                    onToggleQuickActions = { showQuickActions = !showQuickActions }
+                    }
                 )
             }
-
-            // 快捷入口 FAB — Chat 内跳转 Camera / Settings / Model Center
-            val quickActionItems = listOf(
-                ExpandableFabMenuItem(
-                    icon = Icons.Rounded.CameraAlt,
-                    label = stringResource(R.string.camera),
-                    onClick = onNavigateToCamera
-                ),
-                ExpandableFabMenuItem(
-                    icon = Icons.Rounded.Settings,
-                    label = stringResource(R.string.settings),
-                    onClick = onNavigateToSettings
-                ),
-                ExpandableFabMenuItem(
-                    icon = Icons.Rounded.Download,
-                    label = stringResource(R.string.model_download),
-                    onClick = onNavigateToModelCenter
-                )
-            )
-            ExpandableFabMenu(
-                items = quickActionItems,
-                expanded = showQuickActions,
-                onToggleExpanded = { showQuickActions = !showQuickActions },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 80.dp)
-                    .navigationBarsPadding(),
-                contentDescription = stringResource(R.string.cd_quick_actions)
-            )
 
             // 侧边栏
             ChatThreadSidebar(
@@ -530,8 +494,7 @@ private fun ChatInputArea(
     isProcessing: Boolean,
     onModelSwitch: (ChatModelOption) -> Unit,
     onSendMessage: (String) -> Unit,
-    onImagePicked: (Uri) -> Unit = {},
-    onToggleQuickActions: () -> Unit = {}
+    onImagePicked: (Uri) -> Unit = {}
 ) {
     var text by remember { mutableStateOf("") }
     var showModelMenu by remember { mutableStateOf(false) }
@@ -593,8 +556,7 @@ private fun ChatInputArea(
                             settingsRepository.updateChatInputMode("voice")
                         }
                     },
-                    onShowPhotoPicker = { showPhotoPicker = true },
-                    onToggleQuickActions = onToggleQuickActions
+                    onShowPhotoPicker = { showPhotoPicker = true }
                 )
 
                 ChatInputMode.VOICE -> ChatVoiceInputMode(
@@ -604,8 +566,7 @@ private fun ChatInputArea(
                         scope.launch {
                             settingsRepository.updateChatInputMode("text")
                         }
-                    },
-                    onToggleQuickActions = onToggleQuickActions
+                    }
                 )
             }
         }
@@ -638,8 +599,7 @@ private fun ChatTextInputMode(
     showModelMenu: Boolean,
     onModelSwitch: (ChatModelOption) -> Unit,
     onSwitchToVoice: () -> Unit,
-    onShowPhotoPicker: () -> Unit,
-    onToggleQuickActions: () -> Unit
+    onShowPhotoPicker: () -> Unit
 ) {
     val hasContent = text.isNotBlank()
 
@@ -881,8 +841,7 @@ private fun CircularIconButton(
 
 @Composable
 private fun ChatVoiceInputMode(
-    onSwitchToText: () -> Unit,
-    onToggleQuickActions: () -> Unit
+    onSwitchToText: () -> Unit
 ) {
     // 语音输入内容区域（外层已由 ChatInputArea 统一包裹白色卡片）
     Column(

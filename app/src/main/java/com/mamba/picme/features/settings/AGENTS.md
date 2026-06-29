@@ -116,7 +116,22 @@
 - **关闭模式**：禁用 Agent
 - **隐私级别**：`STRICT` / `PERMISSIVE`；运行时输入分级为 `PUBLIC` / `SENSITIVE` / `RESTRICTED`
 
-### 2.7 Agent 集成（2026-05 新增）
+### 2.7 相册功能入口（2026-06 新增）
+
+**入口位置**：设置页「相册功能」卡片（`SettingsScreen` 中非 Debug 区域）
+
+**当前功能**：
+- **管理重复照片**：点击后导航到独立的 `DuplicateManagerRoute`
+  - 使用共享的 `MediaViewModel`（与 `GalleryScreen` 同一实例）
+  - 进入时自动调用 `startDuplicateScan()` 扫描重复/相似照片
+  - 顶部栏提供「返回」和「删除全部重复」操作
+  - 通过系统返回键或顶部返回按钮退出，返回到 Settings 页
+
+**实现约定**：
+- 相册功能卡片对所有构建类型可见（非 Debug 限定）
+- 图标统一使用 `SettingsClickableRow` 的 `leadingIcon` + 右侧箭头，保持可点击心智
+
+### 2.8 Agent 集成（2026-05 新增）
 
 **SettingsAgentIntegration**
 - 通过 `SettingsCapability` 绑定到 `CapabilityRegistry`

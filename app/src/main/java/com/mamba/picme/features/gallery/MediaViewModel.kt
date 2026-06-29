@@ -49,9 +49,6 @@ class MediaViewModel(
     private val _groupingMode = MutableStateFlow(GroupingMode.DATE)
     val groupingMode = _groupingMode.asStateFlow()
 
-    private val _showDuplicateManager = MutableStateFlow(false)
-    val showDuplicateManager = _showDuplicateManager.asStateFlow()
-
     private val _duplicateGroups = MutableStateFlow<List<DuplicateGroup>>(emptyList())
     val duplicateGroups = _duplicateGroups.asStateFlow()
 
@@ -200,9 +197,8 @@ class MediaViewModel(
         }
     }
 
-    fun toggleDuplicateManager(show: Boolean) {
-        _showDuplicateManager.value = show
-        if (show && _duplicateGroups.value.isEmpty()) {
+    fun startDuplicateScan() {
+        if (_duplicateGroups.value.isEmpty()) {
             scanForDuplicates()
         }
     }

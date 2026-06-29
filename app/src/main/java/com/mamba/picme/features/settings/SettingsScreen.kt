@@ -18,7 +18,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Label
+import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -88,6 +90,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToModelCenter: (String) -> Unit = {},
     onNavigateToTagControl: () -> Unit = {},
+    onNavigateToDuplicateManager: () -> Unit = {},
     onNavigateToDebug: () -> Unit = {},
     onNavigateToSearchTest: () -> Unit = {}
 ) {
@@ -267,6 +270,7 @@ fun SettingsScreen(
             localKwsModel = localKwsModel,
             onLocalKwsModelChange = { viewModel.setLocalKwsModel(it) },
             onNavigateToModelCenter = onNavigateToModelCenter,
+            onNavigateToDuplicateManager = onNavigateToDuplicateManager,
             isModelDownloaded = viewModel::isModelDownloaded,
             getModelId = viewModel::getModelId,
             downloadModel = viewModel::downloadModel,
@@ -344,6 +348,7 @@ private fun SettingsContent(
     onLandmarkModelTypeSelected: (DetectionModelType) -> Unit,
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onNavigateToModelCenter: (String) -> Unit,
+    onNavigateToDuplicateManager: () -> Unit = {},
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
     downloadModel: (String, ModelConfig) -> Unit,
@@ -408,6 +413,19 @@ private fun SettingsContent(
                 title = stringResource(R.string.ai_agent),
                 description = stringResource(R.string.ai_agent_desc)
             ) {
+                // 模型中心作为 AI 助手卡片第一项
+                SettingsClickableRow(
+                    title = stringResource(R.string.model_center),
+                    subtitle = stringResource(R.string.model_center_desc),
+                    leadingIcon = Icons.Rounded.SmartToy,
+                    onClick = { onNavigateToModelCenter("") }
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+
                 var autoExecutePlans by remember { mutableStateOf(true) }
                 DebugOptionRow(
                     title = stringResource(R.string.ai_agent_auto_execute_plans),
@@ -477,7 +495,20 @@ private fun SettingsContent(
                 )
             }
 
-            // ── 3. 通信通道 ───────────────────────────────────────
+            // ── 3. 相册功能 ───────────────────────────────────────
+            SettingsSection(
+                title = stringResource(R.string.gallery_features),
+                description = stringResource(R.string.gallery_features_desc)
+            ) {
+                SettingsClickableRow(
+                    title = stringResource(R.string.manage_duplicates),
+                    subtitle = stringResource(R.string.duplicate_manager_desc),
+                    leadingIcon = Icons.Rounded.ContentCopy,
+                    onClick = onNavigateToDuplicateManager
+                )
+            }
+
+            // ── 4. 通信通道 ───────────────────────────────────────
             SettingsSection(
                 title = stringResource(R.string.communication_channel),
                 description = stringResource(R.string.communication_channel_desc)
@@ -503,7 +534,7 @@ private fun SettingsContent(
                 )
             }
 
-            // ── 4. 语音交互 ───────────────────────────────────────
+            // ── 5. 语音交互 ───────────────────────────────────────
             SettingsSection(
                 title = stringResource(R.string.voice_control),
                 description = stringResource(R.string.voice_control_desc)
@@ -528,7 +559,7 @@ private fun SettingsContent(
                 }
             }
 
-            // ── 4. 相册调试功能（仅 Debug 构建）────────────────────────
+            // ── 6. 相册调试功能（仅 Debug 构建）────────────────────────
             if (BuildConfig.DEBUG) {
                 SettingsSection(
                     title = "相册调试功能",
@@ -564,7 +595,7 @@ private fun SettingsContent(
                 }
             }
 
-            // ── 5. 美颜引擎 ─────────────────────────────────────
+            // ── 7. 美颜引擎 ─────────────────────────────────────
             StageConfigSection(
                 stage = DetectionStage.ROI,
                 config = roiStageConfig,
@@ -613,7 +644,7 @@ private fun SettingsContent(
                 }
             }
 
-            // ── 6. 系统与权限 ─────────────────────────────────────
+            // ── 8. 系统与权限 ─────────────────────────────────────
             val context = LocalContext.current
             var isFloatingChatRunning by remember {
                 mutableStateOf(FloatingChatBubbleService.isRunning(context))
@@ -720,7 +751,7 @@ private fun SettingsContent(
                 }
             }
 
-            // ── 7. 开发者选项（默认折叠）──────────────────────────
+            // ── 9. 开发者选项（默认折叠）──────────────────────────
             SettingsExpandableSection(
                 title = stringResource(R.string.debug_tools),
                 description = stringResource(R.string.settings_debug_tools_desc),

@@ -30,18 +30,19 @@ data/                     ← 仓储实现、Room DB、DataStore、Retrofit
 di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 ```
 
-### 1.2 页面导航（6 屏，Gallery 为默认首页）
+### 1.2 页面导航（7 屏，Gallery 为默认首页）
 
 | Screen | Route | 定位 |
 |--------|-------|------|
-| `Gallery` | `gallery` | **默认首页** — 智能相册、媒体浏览、AI 搜索、分类管理；右下角 plus 菜单聚合 Chat/Camera/Settings/ModelCenter 入口 |
-| `Chat` | `chat` | 二级页 — AI 对话主页，模型切换、快捷入口；顶部栏提供返回相册按钮 |
+| `Gallery` | `gallery` | **默认首页** — 智能相册、媒体浏览、AI 搜索、分类管理；底部悬浮 Tab 以纯图标聚合 Camera/Chat/ModelCenter 入口；设置入口在顶部栏最右侧 |
+| `Chat` | `chat` | 二级页 — AI 对话主页，模型切换；顶部栏提供返回相册按钮 |
 | `Camera` | `camera` | 辅助入口 — 拍照、美颜预览、语音控制 |
 | `Editor` | `editor` | 图片编辑 — 美颜调节、滤镜、风格特效（当前未注册在 NavHost，从相册/MediaPager 进入） |
-| `Settings` | `settings` | 设置 — 模型管理、语音、远程配置、调试 |
+| `Settings` | `settings` | 设置 — 模型管理、语音、远程配置、相册功能、调试 |
+| `DuplicateManager` | `duplicate_manager` | 相册功能子页 — 重复/相似照片扫描与删除，从 Settings「相册功能」卡片进入 |
 | `Debug` | `debug` | 开发工具 — 日志、截图、样本数据生成 |
 
-> **2026-06 产品重心转移**：Gallery 为默认首页，Chat/Camera/Settings/ModelCenter 作为二级页从 Gallery plus 菜单进入；Camera 降级为辅助入口。详见 `PRODUCT.md`。
+> **2026-06 产品重心转移**：Gallery 为默认首页，Camera/Chat/ModelCenter 作为纯图标入口从 Gallery 底部悬浮 Tab 进入，Settings 从顶部栏进入；Model Center 内置于 Settings 的 AI 助手卡片第一项，重复照片管理内置于 Settings 的相册功能卡片；Camera 降级为辅助入口。详见 `PRODUCT.md`。
 
 ### 1.3 关键入口文件
 

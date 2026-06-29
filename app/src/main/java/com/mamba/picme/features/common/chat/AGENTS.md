@@ -37,9 +37,6 @@
 ├─────────────────────────────┤
 │  ModelSelector + InputBar   │
 │  [本地模型 ▼] [输入框] [发送]│
-├─────────────────────────────┤
-│  ExpandableFabMenu           │
-│  [相机] [设置] [模型下载]    │
 └─────────────────────────────┘
 ```
 
@@ -52,9 +49,9 @@
 | **MessageList** | `features/chat/components/MessageList.kt` | 消息列表渲染，支持多种消息类型 |
 | **ModelSelector** | `features/chat/components/ModelSelector.kt` | 输入框左侧下拉，本地/远程模型切换 |
 | **ChatInputBar** | `features/chat/components/ChatInputBar.kt` | 输入框 + 发送按钮 + 语音切换 |
-| **ExpandableFabMenu** | `features/common/components/ExpandableFabMenu.kt` | 右下角可展开菜单：相机/设置/模型下载 |
-| **QuickActionBar** | `features/chat/components/QuickActionBar.kt` | 底部快捷入口：相机/相册/编辑（可选保留） |
 | **MessageRepository** | `data/repository/MessageRepository.kt` | Room 数据库读写，对话持久化 |
+
+> 注：Chat 页暂不提供底部快捷入口或右下角展开菜单，相机/模型中心等能力统一从相册首页进入。
 
 ## 3. 模型切换实现 (Model Switching)
 

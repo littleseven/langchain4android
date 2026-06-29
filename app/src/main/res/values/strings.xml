@@ -243,8 +243,13 @@
     <string name="ocr_share">Share</string>
     <string name="ocr_copy">Copy</string>
 
+    <!-- Gallery Features -->
+    <string name="gallery_features">Gallery Features</string>
+    <string name="gallery_features_desc">Tools to organize and clean up your photo library.</string>
+
     <!-- Duplicate Management -->
     <string name="manage_duplicates">Manage Duplicates</string>
+    <string name="duplicate_manager_desc">Find and remove duplicate or similar photos to free up space.</string>
     <string name="delete_all_duplicates">Delete All Duplicates</string>
     <string name="no_duplicates_found">No duplicate images found</string>
     <string name="duplicate_groups_found">Found %1$d duplicate groups</string>

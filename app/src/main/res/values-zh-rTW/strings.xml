@@ -234,7 +234,10 @@
 <string name="landmark_compatibility">GPUPixel</string>
 
     <!-- Duplicate Management -->
+    <string name="gallery_features">相簿功能</string>
+    <string name="gallery_features_desc">整理與清理照片圖庫的實用工具。</string>
     <string name="manage_duplicates">管理重複照片</string>
+    <string name="duplicate_manager_desc">尋找並刪除重複或相似照片，釋放儲存空間。</string>
     <string name="delete_all_duplicates">刪除全部重複</string>
     <string name="no_duplicates_found">未找到重複圖片</string>
     <string name="duplicate_groups_found">找到 %1$d 組重複圖片</string>

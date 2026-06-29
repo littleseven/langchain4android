@@ -6,7 +6,7 @@
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 `AGENTS.md` 为准。
 > - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
-**模块定位**: 应用默认首页，提供智能聚类相册浏览、媒体查看器、批量操作与重复照片管理功能；右下角 plus 菜单聚合 Chat / Camera / Settings / Model Center 四个二级页入口，语音 Agent 面板提供自然语言交互入口
+**模块定位**: 应用默认首页，提供智能聚类相册浏览、媒体查看器、批量操作功能；右下角 plus 菜单聚合 Chat / Camera / Settings / Model Center 四个二级页入口，语音 Agent 面板提供自然语言交互入口。重复照片管理入口已迁移至设置页「相册功能」卡片
 
 **主要维护者**: [RD] 全栈工程师
 
@@ -125,7 +125,7 @@ private fun shareMediaAssets(context: Context, assets: List<MediaAsset>) {
 ### 2.4 重复照片管理 (Duplicate Manager)
 
 **技术规范**:
-- **触发时机**: 用户手动开启"重复管理器"时触发扫描
+- **触发时机**: 用户在设置页「相册功能」卡片点击「管理重复照片」后进入独立 `DuplicateManagerRoute` 时触发扫描
 - **扫描逻辑**: 调用 `FindDuplicateMediaUseCase` 在后台线程执行
 - **判定规则**:
   - 精确重复: 文件哈希值相同
@@ -158,20 +158,29 @@ fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
 }
 ```
 
-### 2.5 首页导航与 plus 菜单（2026-06 新增）
+### 2.5 首页导航与底部悬浮 Tab（2026-06 新增）
 
 **首页定位**:
 - `GalleryScreen` 是 `MainActivity` NavHost 的 `startDestination`
-- 系统返回键在相册无内部状态（无选择/Pager/重复管理器/plus 展开）时退出应用
+- 系统返回键在相册无内部状态（无选择/Pager）时退出应用
 
-**plus 菜单**:
-- 使用共享组件 `ExpandableFabMenu`（`features/common/components/ExpandableFabMenu.kt`）
-- 位置：右下角，底部 padding 84.dp，位于语音 Agent 面板上方
-- 入口项（自上而下）：Chat、Camera、Settings、Model Center
-- 点击菜单项后先折叠菜单再执行导航
+**底部悬浮 Tab**:
+- 使用共享组件 `FloatingBottomTab`（`features/common/components/FloatingBottomTab.kt`）
+- 位置：底部居中，底部 padding 16.dp，悬浮于媒体网格之上
+- 入口项（从左到右）：Camera、Chat、Model Center
+- 每项仅显示图标，无文字标签
+- 点击直接导航到对应二级页
+
+**设置入口**:
+- 统一放在 `GalleryTopBar` 动作区最右侧
+- 点击跳转 `SettingsScreen`
+
+**模型中心入口**:
+- 底部 Tab 第三个图标（SmartToy）可直接进入
+- 同时从 Gallery 顶部栏进入 Settings 后，在 AI 助手卡片第一项「Model Center」也可进入
 
 **语音 Agent 面板**:
-- 位置：plus 菜单下方，底部 padding 16.dp
+- 位置：右下角，底部 padding 84.dp，位于底部 Tab 上方
 - 使用 `GalleryAgentPanel` + `AgentChatPanel` 公共组件
 - 负责自然语言相册浏览/编辑/管理指令
 

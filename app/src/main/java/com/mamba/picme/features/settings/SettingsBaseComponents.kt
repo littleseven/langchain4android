@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Card
@@ -243,16 +244,26 @@ internal fun SettingsClickableRow(
     title: String,
     subtitle: String? = null,
     valueText: String? = null,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (subtitle.isNullOrBlank()) 44.dp else 56.dp)
+            .height(if (subtitle.isNullOrBlank()) 56.dp else 64.dp)
             .padding(horizontal = 12.dp)
             .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (leadingIcon != null) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -275,6 +286,12 @@ internal fun SettingsClickableRow(
                 color = MaterialTheme.colorScheme.primary
             )
         }
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 

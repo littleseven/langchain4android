@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,8 +53,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.mamba.picme.core.common.Logger
 
 import com.mamba.picme.features.gallery.agent.rememberGalleryAgentIntegration
-import com.mamba.picme.features.gallery.components.DuplicateManagerScreen
-import com.mamba.picme.features.gallery.components.DuplicateManagerTopBar
 import com.mamba.picme.features.gallery.components.EmptyGalleryMessage
 import com.mamba.picme.features.gallery.components.GalleryPermissionMessage
 import com.mamba.picme.features.gallery.components.GalleryTopBar
@@ -68,8 +64,8 @@ import androidx.core.net.toUri
 import com.mamba.picme.features.gallery.components.shareMediaAssets
 import com.mamba.picme.features.gallery.agent.GalleryAgentPanel
 import com.mamba.picme.features.common.chat.rememberAgentChatConfig
-import com.mamba.picme.features.common.components.ExpandableFabMenu
-import com.mamba.picme.features.common.components.ExpandableFabMenuItem
+import com.mamba.picme.features.common.components.FloatingBottomTab
+import com.mamba.picme.features.common.components.FloatingBottomTabItem
 import android.app.Activity
 import com.mamba.picme.features.gallery.capability.GalleryCapability
 import com.mamba.picme.features.common.SearchField
@@ -86,9 +82,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.ChatBubble
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SmartToy
 
 private const val TAG = "Gallery"
@@ -106,9 +102,6 @@ fun GalleryScreen(
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
-    val showDuplicateManager by viewModel.showDuplicateManager.collectAsState()
-    val duplicateGroups by viewModel.duplicateGroups.collectAsState()
-    val isScanningDuplicates by viewModel.isScanningDuplicates.collectAsState()
 
     var selectedMediaIndex by remember { mutableStateOf<Int?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -363,12 +356,8 @@ fun GalleryScreen(
         }
     }
 
-    var showQuickActions by remember { mutableStateOf(false) }
-
-    BackHandler(enabled = showQuickActions || showDuplicateManager || selectedMediaIndex != null || isSelectionMode) {
+    BackHandler(enabled = selectedMediaIndex != null || isSelectionMode) {
         when {
-            showQuickActions -> showQuickActions = false
-            showDuplicateManager -> viewModel.toggleDuplicateManager(false)
             selectedMediaIndex != null -> selectedMediaIndex = null
             isSelectionMode -> {
                 isSelectionMode = false
@@ -415,11 +404,12 @@ fun GalleryScreen(
                         resultCount = if (searchQuery.isNotBlank()) searchResultMedia.size else null
                     )
                 }
-                selectedMediaIndex == null && !showDuplicateManager -> {
+                selectedMediaIndex == null -> {
                     GalleryTopBar(
                         isSelectionMode = isSelectionMode,
                         selectedCount = selectedIds.size,
                         groupingMode = groupingMode,
+                        onNavigateToSettings = onNavigateToSettings,
                         onToggleSelectionMode = {
                             isSelectionMode = false
                             selectedIds.clear()
@@ -443,7 +433,6 @@ fun GalleryScreen(
                             shareMediaAssets(context, selectedAssets)
                         },
                         onGroupingModeSelected = { mode -> viewModel.setGroupingMode(mode) },
-                        onManageDuplicates = { viewModel.toggleDuplicateManager(true) },
                         onSearchClick = {
                             isSearchActive = true
                             searchResultMedia = emptyList()
@@ -458,14 +447,6 @@ fun GalleryScreen(
                             } else {
                                 context.startForegroundService(TagGenerationService.intentScanIncremental(context))
                             }
-                        }
-                    )
-                }
-                showDuplicateManager -> {
-                    DuplicateManagerTopBar(
-                        onNavigateBack = { viewModel.toggleDuplicateManager(false) },
-                        onDeleteAllDuplicates = {
-                            viewModel.deleteAllDuplicatesExceptOne()
                         }
                     )
                 }
@@ -523,16 +504,6 @@ fun GalleryScreen(
                             onDragSelectionEnd = { }
                         )
                     }
-                }
-
-                showDuplicateManager -> {
-                    DuplicateManagerScreen(
-                        duplicateGroups = duplicateGroups,
-                        isScanning = isScanningDuplicates,
-                        onDeleteGroup = { group ->
-                            viewModel.deleteDuplicateGroup(group, 0)
-                        }
-                    )
                 }
 
                 !hasMediaPermission -> {
@@ -619,49 +590,41 @@ fun GalleryScreen(
             val activeMedia = selectedMediaIndex?.let { allFlatMedia.getOrNull(it) }
             val rect = activeMedia?.let { thumbnailPositions[it.id] }
 
-            // 快捷入口 FAB — 聚合 Chat / Camera / Settings / Model Center
-            if (selectedMediaIndex == null && !showDuplicateManager) {
-                val menuItems = listOf(
-                    ExpandableFabMenuItem(
-                        icon = Icons.Rounded.ChatBubble,
-                        label = stringResource(R.string.chat),
-                        onClick = onNavigateToChat
-                    ),
-                    ExpandableFabMenuItem(
+            // 悬浮底部 Tab — 相机 / 聊天 / 模型中心（纯图标）
+            if (selectedMediaIndex == null) {
+                val tabItems = listOf(
+                    FloatingBottomTabItem(
                         icon = Icons.Rounded.CameraAlt,
-                        label = stringResource(R.string.camera),
                         onClick = onNavigateToCamera
                     ),
-                    ExpandableFabMenuItem(
-                        icon = Icons.Rounded.Settings,
-                        label = stringResource(R.string.settings),
-                        onClick = onNavigateToSettings
+                    FloatingBottomTabItem(
+                        icon = Icons.Rounded.ChatBubble,
+                        onClick = onNavigateToChat
                     ),
-                    ExpandableFabMenuItem(
+                    FloatingBottomTabItem(
                         icon = Icons.Rounded.SmartToy,
-                        label = stringResource(R.string.model_center),
                         onClick = onNavigateToModelCenter
                     )
                 )
-                ExpandableFabMenu(
-                    items = menuItems,
-                    expanded = showQuickActions,
-                    onToggleExpanded = { showQuickActions = !showQuickActions },
+                FloatingBottomTab(
+                    items = tabItems,
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 84.dp)
-                        .navigationBarsPadding(),
-                    contentDescription = stringResource(R.string.cd_quick_actions)
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp)
+                        .navigationBarsPadding()
                 )
             }
 
-            // Agent Chat 入口 - 右下角浮动按钮
-            if (selectedMediaIndex == null && !showDuplicateManager) {
+            // Agent Chat 入口 - 右下角浮动按钮（位于底部 Tab 上方）
+            if (selectedMediaIndex == null) {
                 GalleryAgentPanel(
                     integration = agentIntegration,
                     pageContext = pageContext,
                     voiceCoordinator = voiceCoordinator,
-                    modifier = Modifier.align(Alignment.BottomEnd)
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 84.dp)
+                        .navigationBarsPadding()
                 )
             }
 
