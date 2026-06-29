@@ -15,7 +15,7 @@ data class Stage1Result(
     /**
      * 合影判定策略：
      * - 有效人脸数 >= 2 即识别为合影
-     * - 有效人脸定义：已通过 detectFacesOnly 过滤掉面积 < 3% 图片总面积的小脸/误检
+     * - 有效人脸定义：已通过 detectFacesOnly 过滤掉面积 < 1.5% 图片总面积的小脸/误检
      *
      * 此逻辑与 FaceDetectorManager.detectFacesOnly 中的过滤策略一致。
      */
@@ -183,7 +183,7 @@ data class FaceRoiPersist(
  * [Pass 1] 单张照片的人脸检测 + Embedding 提取结果
  */
 data class Stage1WithEmbeddingsResult(
-    /** faceRoi JSON（null = 解码失败） */
+    /** faceRoi JSON（null = 解码失败；非 null = 已处理，可能无人脸） */
     val faceRoiJson: String?,
     /** 每张人脸的 512 维 embedding */
     val embeddings: List<FloatArray>

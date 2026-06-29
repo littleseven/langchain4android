@@ -153,8 +153,8 @@ class FaceDetectorManager(context: Context) : FaceDetector {
      * 专为 TAG 生成等场景设计，跳过 landmark 模型以节省 ~20-80ms。
      * 直接使用 ROI 检测器（RetinaFace Det500M），返回像素坐标矩形。
      *
-     * 支持多脸检测：当检测到多个人脸时，过滤掉过小的脸（< 3% 图片面积），
-     * 剩余有效人脸数 >= 2 且至少有一张脸 >= 5% 图片面积时，识别为合影。
+     * 支持多脸检测：当检测到多个人脸时，过滤掉过小的脸（< 1.5% 图片面积），
+     * 剩余有效人脸数 >= 2 时识别为合影。
      */
     override fun detectFacesOnly(bitmap: Bitmap): List<RectF> {
         if (!isPipelineInitialized) {

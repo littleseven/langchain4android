@@ -83,6 +83,36 @@ class TagScanOrchestrator(
             TagScanPass.QWEN_TAGGING -> "3"
             TagScanPass.MOBILE_CLIP_ENCODING -> "4"
         }
+
+        /**
+         * 统一数据库统计快照
+         *
+         * 不依赖 [TagScanOrchestrator] 实例，供 UI/Service 直接使用，确保口径一致。
+         * - [remainingForPass1]：尚未进行人脸检测/MobileCLIP 编码的媒体数
+         * - [remainingForPass3]：尚未生成 Qwen 标签的媒体数（不强制要求已有 faceRoiResult，与 Pass 1 解耦）
+         */
+        suspend fun getDbStats(db: AppDatabase): TagScanDbStats {
+            val totalMedia = db.mediaDao().getTotalCount()
+            val withFace = db.mediaDao().searchByHasFace().size
+            val withSemantic = db.mediaDao().getMediaWithSemanticEmbedding().size
+            val withLabels = totalMedia - db.mediaDao().getUnlabeledMedia().size
+            val personCount = db.personDao().getAllPersons().size
+            val faceEmbeddingCount = db.personDao().getAllEmbeddingCount()
+            val remainingForPass1 = db.mediaDao().getMediaWithoutFaceRoi().size
+            // Pass 3 剩余独立统计：所有无 labels 的媒体，不强制要求已有 faceRoiResult
+            val remainingForPass3 = db.mediaDao().getUnlabeledMedia().size
+
+            return TagScanDbStats(
+                totalMedia = totalMedia,
+                withFace = withFace,
+                withLabels = withLabels,
+                withSemantic = withSemantic,
+                personCount = personCount,
+                faceEmbeddingCount = faceEmbeddingCount,
+                remainingForPass1 = remainingForPass1,
+                remainingForPass3 = remainingForPass3
+            )
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -118,7 +148,7 @@ class TagScanOrchestrator(
      * 核心去重规则：
      * 1. 跳过最近一次全量扫描在 [skipRecentlyTaggedMs] 窗口内且覆盖所有请求 Pass 的媒体
      * 2. 失败项默认 24h 后才允许自动重试
-     * 3. 按 [order] 排序，默认 oldest-first 避免老照片饿死
+     * 3. 按 [order] 排序，默认 newest-first 优先处理新拍摄/新添加的照片
      */
     suspend fun scheduleAutoScan(policy: ScanQueuePolicy = ScanQueuePolicy()): String {
         val sessionId = newSessionId()
@@ -127,8 +157,11 @@ class TagScanOrchestrator(
         val before = System.currentTimeMillis() - policy.skipRecentlyTaggedMs
         val requestedPassNumbers = policy.passes.map { it.toPassNumber() }.toSet()
 
-        // 先按时间窗口拉取候选，再在内存中精确过滤 pass 覆盖
-        val candidates = db.mediaDao().getMediaForIncrementalScan(before, policy.maxBatchSize * 2)
+        // 按排序策略从数据库拉取候选，确保方向正确且不会被另一方向的记录截断
+        val candidates = when (policy.order) {
+            QueueOrder.OLDEST_FIRST -> db.mediaDao().getMediaForIncrementalScanOldest(before, policy.maxBatchSize * 2)
+            QueueOrder.NEWEST_FIRST -> db.mediaDao().getMediaForIncrementalScanNewest(before, policy.maxBatchSize * 2)
+        }
         val media = candidates.filter { entity ->
             !isPassesCovered(entity.lastTagScanPasses, requestedPassNumbers)
         }.let { filtered ->
@@ -774,6 +807,26 @@ class TagScanOrchestrator(
             false
         }
     }
+
+    // ═══════════════════════════════════════════════════════════
+    //  统一数据库统计
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * 统一数据库统计快照（委托到伴生对象方法，供已有 Orchestrator 持有者使用）
+     */
+    suspend fun getDbStats(): TagScanDbStats = getDbStats(db)
+
+    data class TagScanDbStats(
+        val totalMedia: Int,
+        val withFace: Int,
+        val withLabels: Int,
+        val withSemantic: Int,
+        val personCount: Int,
+        val faceEmbeddingCount: Int,
+        val remainingForPass1: Int,
+        val remainingForPass3: Int
+    )
 
     private fun List<StatusCount>.count(status: TagScanTaskStatus): Int {
         return find { it.status == status }?.cnt ?: 0

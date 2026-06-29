@@ -128,175 +128,20 @@ class TagGenerationScheduler(
         )
     }
 
-    /** 触发全量 3-Pass 混合扫描 */
+    /**
+     * 触发全量 3-Pass 混合扫描
+     *
+     * @deprecated 已迁移到 [TagScanOrchestrator.scheduleAutoScan] / [TagScanOrchestrator.schedulePass]。
+     * 旧方法基于局部计数器，与任务队列系统的进度不同源，会导致统计不一致。
+     */
+    @Deprecated(
+        "Use TagScanOrchestrator.scheduleAutoScan() or schedulePass() instead",
+        ReplaceWith("TagScanOrchestrator(context, this).scheduleAutoScan()")
+    )
     fun scanAll(progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }) {
-        if (currentJob?.isActive == true) {
-            Log.w(TAG, "Scan already in progress, ignoring")
-            return
-        }
-
-        currentJob = scope.launch {
-            try {
-                _isScanning.value = true
-                Log.i(TAG, "=== 3-Pass Hybrid Scan started (MobileCLIP inline in Pass 1) ===")
-
-                if (!ensureModelLoaded()) {
-                    Log.w(TAG, "Model not loaded, aborting")
-                    return@launch
-                }
-
-                val dao = db.mediaDao()
-                val allMedia = dao.getAllMediaNow()
-                val total = allMedia.size
-                Log.i(TAG, "Total media: $total")
-
-                if (total == 0) {
-                    _progress.value = TagScanProgress(0, 0, PipelineStage.COMPLETE)
-                    return@launch
-                }
-
-                // ═══════════════════════════════════════════════
-                //  Pass 1: 人脸检测 + 人脸 Embedding + MobileCLIP 语义编码（已内联合并）
-                // ═══════════════════════════════════════════════
-                _progress.value = TagScanProgress(0, total, PipelineStage.FACE_ROI)
-                Log.i(TAG, "=== Pass 1: Face detection + Face Embedding + MobileCLIP (inline) ===")
-
-                // 清理旧 embedding 和 persons，确保 Pass 2 结果正确
-                personDao.clearAllEmbeddings()
-                personDao.clearAllPersons()
-                dao.resetAllFaceIds()
-                // 全量扫描时重置语义 embedding，确保重新编码
-                dao.resetAllSemanticEmbeddings()
-
-                var pass1Processed = 0
-                for (entity in allMedia) {
-                    if (!isActive) {
-                        Log.i(TAG, "Pass 1 cancelled at $pass1Processed/$total")
-                        break
-                    }
-                    if (!guardCheck()) break
-
-                    try {
-                        val result = pipeline.stage1WithEmbeddings(
-                            uri = entity.uri,
-                            lensFacing = CameraSelector.LENS_FACING_BACK,
-                            mediaId = entity.id
-                        )
-
-                        // 持久化 faceRoi 结果
-                        // 【关键修复】只有当检测到有效 embedding 时才标记 hasFace=true
-                        // 避免 RetinaFace 误检（非人脸区域）导致照片错误进入人脸分组
-                        val hasValidFace = result.faceRoiJson != null && result.embeddings.isNotEmpty()
-                        if (result.faceRoiJson != null) {
-                            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, hasValidFace)
-                        }
-
-                        // 写入 embeddings（personId=null，供 Pass 2 DBSCAN）
-                        for (embedding in result.embeddings) {
-                            personDao.insertEmbedding(
-                                com.mamba.picme.data.local.entity.FaceEmbeddingEntity(
-                                    mediaId = entity.id,
-                                    personId = null,
-                                    embedding = floatArrayToByteArray(embedding)
-                                )
-                            )
-                        }
-
-                        // MobileCLIP 语义编码已内联合并到 Pass 1：在同一循环中执行
-                        // 不依赖 Pass 1 的 Bitmap（尺寸不同），独立加载 512px Bitmap
-                        try {
-                            val semanticEmbedding = pipeline.stage4MobileClipEncoding(
-                                uri = entity.uri,
-                                mediaId = entity.id
-                            )
-                            if (semanticEmbedding != null) {
-                                dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "MobileCLIP encoding (inline in Pass 1) failed for media ${entity.id}: ${e.message}")
-                        }
-
-                        pass1Processed++
-                        _progress.value = TagScanProgress(pass1Processed, total, PipelineStage.FACE_ROI)
-                        progressCallback(pass1Processed, total)
-                        delay(getThrottleMs())
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Pass 1 failed for media ${entity.id}: ${e.message}")
-                    }
-                }
-
-                if (!isActive) return@launch
-
-                // ═══════════════════════════════════════════════
-                //  Pass 2: DBSCAN 全局聚类
-                // ═══════════════════════════════════════════════
-                _progress.value = TagScanProgress(pass1Processed, total, PipelineStage.FACE_CLUSTER)
-                Log.i(TAG, "=== Pass 2: DBSCAN clustering ===")
-
-                try {
-                    runDbscanClustering(dao)
-                    Log.i(TAG, "Pass 2 completed")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Pass 2 failed: ${e.message}")
-                }
-
-                if (!isActive) return@launch
-
-                // ═══════════════════════════════════════════════
-                //  Pass 3: Qwen 图像理解标签生成
-                // ═══════════════════════════════════════════════
-                val needTagging = dao.getMediaWithFaceRoiWithoutLabels()
-                val taggingTotal = needTagging.size
-                Log.i(TAG, "=== Pass 3: Qwen tagging ($taggingTotal media) ===")
-
-                var pass3Processed = 0
-                for (entity in needTagging) {
-                    if (!isActive) {
-                        Log.i(TAG, "Pass 3 cancelled at $pass3Processed/$taggingTotal")
-                        break
-                    }
-                    if (!guardCheck()) break
-
-                    try {
-                        val faceRoiJson = dao.getFaceRoiResult(entity.id)
-                        val normalized = pipeline.stage3QwenTagging(entity.uri, faceRoiJson)
-
-                        val unified = UnifiedTagResult(
-                            scene = normalized.scene,
-                            activity = normalized.activity,
-                            objects = normalized.objects,
-                            tags = normalized.tags,
-                            qwenSummary = normalized.summary
-                        )
-                        val resultJson = unifiedTagToJson(unified)
-                        dao.updateLabels(entity.id, resultJson)
-
-                        pass3Processed++
-                        val overallProcessed = pass1Processed + pass3Processed
-                        _progress.value = TagScanProgress(overallProcessed, total, PipelineStage.QWEN_TAGGING)
-                        progressCallback(overallProcessed, total)
-                        delay(getThrottleMs())
-
-                        // 批次冷却：每 BATCH_SIZE 张后强制冷却，防止连续 LLM 推理导致过热
-                        if (pass3Processed % BATCH_SIZE == 0 && pass3Processed < taggingTotal) {
-                            Log.i(TAG, "Pass 3 batch cooldown after $pass3Processed/$taggingTotal")
-                            delay(BATCH_COOLDOWN_MS)
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Pass 3 failed for media ${entity.id}: ${e.message}")
-                    }
-                }
-
-                _progress.value = TagScanProgress(total, total, PipelineStage.COMPLETE)
-                Log.i(TAG, "=== 3-Pass Hybrid Scan completed: " +
-                    "P1=$pass1Processed/$total (MobileCLIP inline), P2=DBSCAN, P3=$pass3Processed/$taggingTotal ===")
-            } finally {
-                _isScanning.value = false
-                unloadLlm()
-                // 释放 MobileCLIP 引擎
-                pipeline.releaseMobileClip()
-            }
-        }
+        throw NotImplementedError(
+            "scanAll is deprecated. Use TagScanOrchestrator.scheduleAutoScan() or schedulePass() instead."
+        )
     }
 
     /** 处理单张新照片 */
@@ -321,182 +166,37 @@ class TagGenerationScheduler(
         }
     }
 
-    /** 取消进行中的扫描 */
+    /**
+     * 取消进行中的扫描
+     *
+     * @deprecated 已迁移到 [TagScanOrchestrator.cancel]。
+     */
+    @Deprecated(
+        "Use TagScanOrchestrator.cancel() instead",
+        ReplaceWith("TagScanOrchestrator(context, this).cancel()")
+    )
     fun cancel() {
-        currentJob?.cancel()
-        _isScanning.value = false
-        Log.i(TAG, "Scan cancelled")
+        throw NotImplementedError(
+            "cancel() is deprecated. Use TagScanOrchestrator.cancel() instead."
+        )
     }
 
     /**
      * 增量扫描：3-Pass 混合模型，仅处理未标记标签的照片
      *
-     * 与 [scanAll] 的全量不同，跳过已有 labels 的媒体。
-     * - 对未检测 faceRoi 的媒体执行 Pass 1
-     * - 若新增 embedding 则执行 Pass 2 DBSCAN
-     * - 对已检测但无标签的媒体执行 Pass 3
-     *
-     * @param maxPhotos Pass 3 最大处理量，防止自动触发时连续长时间推理
+     * @deprecated 已迁移到 [TagScanOrchestrator.scheduleAutoScan]。
      */
+    @Deprecated(
+        "Use TagScanOrchestrator.scheduleAutoScan() instead",
+        ReplaceWith("TagScanOrchestrator(context, this).scheduleAutoScan()")
+    )
     fun scanIncremental(
         maxPhotos: Int = INCREMENTAL_MAX_PHOTOS,
         progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
     ) {
-        if (currentJob?.isActive == true) {
-            Log.w(TAG, "Scan already in progress, ignoring")
-            return
-        }
-
-        currentJob = scope.launch {
-            try {
-                _isScanning.value = true
-                Log.i(TAG, "=== Incremental 3-Pass Scan started ===")
-
-                if (!ensureModelLoaded()) {
-                    Log.w(TAG, "Model not loaded, aborting")
-                    return@launch
-                }
-
-                val dao = db.mediaDao()
-                val unlabeledMedia = dao.getUnlabeledMedia()
-                val total = unlabeledMedia.size
-
-                if (total == 0) {
-                    Log.i(TAG, "All media already tagged, nothing to do")
-                    _progress.value = TagScanProgress(0, 0, PipelineStage.COMPLETE)
-                    return@launch
-                }
-
-                val allCount = dao.getTotalCount()
-                val alreadyDone = allCount - total
-
-                // ── Pass 1: 未检测 ROI 的媒体（含 MobileCLIP 语义编码内联） ──────────────
-                val needRoi = unlabeledMedia.filter { dao.getFaceRoiResult(it.id) == null }
-                var pass1Processed = 0
-                var mobileClipProcessed = 0
-
-                if (needRoi.isNotEmpty()) {
-                    _progress.value = TagScanProgress(alreadyDone, allCount, PipelineStage.FACE_ROI)
-                    Log.i(TAG, "Incremental Pass 1: ${needRoi.size} media need face detection + MobileCLIP")
-
-                    for (entity in needRoi) {
-                        if (!isActive) break
-                        if (!guardCheck()) break
-
-                        try {
-                            val result = pipeline.stage1WithEmbeddings(
-                                uri = entity.uri,
-                                lensFacing = CameraSelector.LENS_FACING_BACK,
-                                mediaId = entity.id
-                            )
-
-                            // 【关键修复】只有当检测到有效 embedding 时才标记 hasFace=true
-                            val hasValidFace = result.faceRoiJson != null && result.embeddings.isNotEmpty()
-                            if (result.faceRoiJson != null) {
-                                dao.updateFaceRoiResult(entity.id, result.faceRoiJson, hasValidFace)
-                            }
-
-                            for (embedding in result.embeddings) {
-                                personDao.insertEmbedding(
-                                    FaceEmbeddingEntity(
-                                        mediaId = entity.id,
-                                        personId = null,
-                                        embedding = floatArrayToByteArray(embedding)
-                                    )
-                                )
-                            }
-
-                            // MobileCLIP 语义编码已内联合并到 Pass 1：同步执行
-                            try {
-                                val semanticEmbedding = pipeline.stage4MobileClipEncoding(
-                                    uri = entity.uri,
-                                    mediaId = entity.id
-                                )
-                                if (semanticEmbedding != null) {
-                                    dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
-                                }
-                                mobileClipProcessed++
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Incremental MobileCLIP encoding (inline in Pass 1) failed for media ${entity.id}: ${e.message}")
-                            }
-
-                            pass1Processed++
-                            val current = alreadyDone + pass1Processed
-                            _progress.value = TagScanProgress(current, allCount, PipelineStage.FACE_ROI)
-                            progressCallback(current, allCount)
-                            delay(getThrottleMs())
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Incremental Pass 1 failed for media ${entity.id}: ${e.message}")
-                        }
-                    }
-
-                    // ── Pass 2: 增量 DBSCAN ────────────────
-                    try {
-                        runDbscanClustering(dao)
-                        Log.i(TAG, "Incremental Pass 2 completed")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Incremental Pass 2 failed: ${e.message}")
-                    }
-                }
-
-                if (!isActive) return@launch
-
-                // ── Pass 3: Qwen 标签生成 ────────────────
-                val needTagging = dao.getMediaWithFaceRoiWithoutLabels()
-                var pass3Processed = 0
-                if (needTagging.isNotEmpty()) {
-                    val cappedTagging = if (needTagging.size > maxPhotos) {
-                        Log.i(TAG, "Incremental Pass 3: capping at $maxPhotos/${needTagging.size} to prevent overheating")
-                        needTagging.take(maxPhotos)
-                    } else {
-                        needTagging
-                    }
-                    _progress.value = TagScanProgress(alreadyDone + pass1Processed, allCount, PipelineStage.QWEN_TAGGING)
-                    Log.i(TAG, "Incremental Pass 3: ${cappedTagging.size} media need Qwen tagging")
-
-                    for (entity in cappedTagging) {
-                        if (!isActive) break
-                        if (!guardCheck()) break
-
-                        try {
-                            val faceRoiJson = dao.getFaceRoiResult(entity.id)
-                            val normalized = pipeline.stage3QwenTagging(entity.uri, faceRoiJson)
-
-                            val unified = UnifiedTagResult(
-                                scene = normalized.scene,
-                                activity = normalized.activity,
-                                objects = normalized.objects,
-                                tags = normalized.tags,
-                                qwenSummary = normalized.summary
-                            )
-                            dao.updateLabels(entity.id, unifiedTagToJson(unified))
-
-                            pass3Processed++
-                            val current = alreadyDone + pass1Processed + pass3Processed
-                            _progress.value = TagScanProgress(current, allCount, PipelineStage.QWEN_TAGGING)
-                            progressCallback(current, allCount)
-                            delay(getThrottleMs())
-
-                            // 批次冷却
-                            if (pass3Processed % BATCH_SIZE == 0 && pass3Processed < cappedTagging.size) {
-                                Log.i(TAG, "Incremental Pass 3 batch cooldown after $pass3Processed/${cappedTagging.size}")
-                                delay(BATCH_COOLDOWN_MS)
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Incremental Pass 3 failed for media ${entity.id}: ${e.message}")
-                        }
-                    }
-                }
-
-                val finalDone = alreadyDone + pass1Processed + pass3Processed
-                _progress.value = TagScanProgress(finalDone, allCount, PipelineStage.COMPLETE)
-                Log.i(TAG, "Incremental scan completed: P1=$pass1Processed (MobileCLIP inline=$mobileClipProcessed), P3=$pass3Processed, total=${finalDone}/$allCount")
-            } finally {
-                _isScanning.value = false
-                unloadLlm()
-                pipeline.releaseMobileClip()
-            }
-        }
+        throw NotImplementedError(
+            "scanIncremental is deprecated. Use TagScanOrchestrator.scheduleAutoScan() instead."
+        )
     }
 
     // ═══════════════════════════════════════════════════
@@ -506,296 +206,69 @@ class TagGenerationScheduler(
     /**
      * [Pass 1 独立执行] 全量人脸检测 + 人脸 Embedding + MobileCLIP 语义编码（内联合并）
      *
-     * - 遍历所有媒体，重新执行人脸检测、人脸 embedding 提取和 MobileCLIP 语义编码
-     * - faceRoiResult 写入 media_assets 表（供 Pass 3 使用）
-     * - 人脸 embedding 写入 face_embeddings 表（personId=null，供 Pass 2 聚类）
-     * - semanticEmbedding 写入 media_assets 表（供语义搜索使用）
-     * - 注意：不会清除旧 embedding，多次执行会产生重复数据
+     * @deprecated 已迁移到 [TagScanOrchestrator.schedulePass]。
      */
+    @Deprecated(
+        "Use TagScanOrchestrator.schedulePass(TagScanPass.FACE_DETECTION, mode=FULL) instead",
+        ReplaceWith("TagScanOrchestrator(context, this).schedulePass(TagScanPass.FACE_DETECTION, mode = FULL)")
+    )
     fun scanPass1(
         progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
     ) {
-        if (currentJob?.isActive == true) {
-            Log.w(TAG, "Scan already in progress, ignoring")
-            return
-        }
-
-        currentJob = scope.launch {
-            try {
-                _isScanning.value = true
-                Log.i(TAG, "=== Pass 1 Only: Face detection + Embedding + MobileCLIP (inline) ===")
-
-                // Pass 1 使用 InsightFace + MobileFaceNet，由 Pipeline 内部懒加载
-                val dao = db.mediaDao()
-
-                // 清理旧 embedding，确保全量重提取
-                personDao.clearAllEmbeddings()
-                personDao.clearAllPersons()
-
-                val allMedia = dao.getAllMediaNow()
-                val total = allMedia.size
-                var processed = 0
-
-                _progress.value = TagScanProgress(0, total, PipelineStage.FACE_ROI)
-
-                for (entity in allMedia) {
-                    if (!isActive) break
-                    if (!guardCheck()) break
-
-                    try {
-                        val result = pipeline.stage1WithEmbeddings(
-                            uri = entity.uri,
-                            lensFacing = CameraSelector.LENS_FACING_BACK,
-                            mediaId = entity.id
-                        )
-
-                        // 【关键修复】只有当检测到有效 embedding 时才标记 hasFace=true
-                        val hasValidFace = result.faceRoiJson != null && result.embeddings.isNotEmpty()
-                        if (result.faceRoiJson != null) {
-                            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, hasValidFace)
-                        }
-                        for (embedding in result.embeddings) {
-                            personDao.insertEmbedding(
-                                FaceEmbeddingEntity(
-                                    mediaId = entity.id,
-                                    personId = null,
-                                    embedding = floatArrayToByteArray(embedding)
-                                )
-                            )
-                        }
-
-                        // MobileCLIP 语义编码已内联合并到 Pass 1
-                        try {
-                            val semanticEmbedding = pipeline.stage4MobileClipEncoding(
-                                uri = entity.uri,
-                                mediaId = entity.id
-                            )
-                            if (semanticEmbedding != null) {
-                                dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "MobileCLIP encoding (inline in Pass 1) failed for media ${entity.id}: ${e.message}")
-                        }
-
-                        processed++
-                        _progress.value = TagScanProgress(processed, total, PipelineStage.FACE_ROI)
-                        progressCallback(processed, total)
-                        delay(getThrottleMs())
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Pass 1 failed for media ${entity.id}: ${e.message}")
-                        processed++
-                    }
-                }
-
-                _progress.value = TagScanProgress(processed, total, PipelineStage.COMPLETE)
-                Log.i(TAG, "=== Pass 1 Only completed: $processed/$total ===")
-            } finally {
-                _isScanning.value = false
-            }
-        }
+        throw NotImplementedError(
+            "scanPass1 is deprecated. Use TagScanOrchestrator.schedulePass(TagScanPass.FACE_DETECTION, mode = FULL)."
+        )
     }
 
     /**
      * [Pass 2 独立执行] DBSCAN 全局聚类
      *
-     * 清除旧的聚类结果，基于 face_embeddings 表中**所有** embedding
-     * 重新执行 DBSCAN 全量聚类。
-     *
-     * 与 [scanAll] 内部 Pass 2 的区别：
-     * - scanAll 的 Pass 2 仅聚类 Pass 1 刚生成的新 embedding
-     * - 本方法重置所有分配后，对所有 embedding 重新聚类
-     *
-     * 前置条件：face_embeddings 表中已有 embedding（需先执行 Pass 1）
+     * @deprecated 已迁移到 [TagScanOrchestrator.schedulePass]。
      */
+    @Deprecated(
+        "Use TagScanOrchestrator.schedulePass(TagScanPass.DBSCAN) instead",
+        ReplaceWith("TagScanOrchestrator(context, this).schedulePass(TagScanPass.DBSCAN)")
+    )
     fun scanPass2(
         progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
     ) {
-        if (currentJob?.isActive == true) {
-            Log.w(TAG, "Scan already in progress, ignoring")
-            return
-        }
-
-        currentJob = scope.launch {
-            try {
-                _isScanning.value = true
-                Log.i(TAG, "=== Pass 2 Only: Full re-clustering ===")
-
-                val dao = db.mediaDao()
-
-                // 清除旧聚类结果，准备重聚类（保留 hasFace 不变）
-                // 注意：先重置 embedding 再删除 persons，利用 SET_NULL 外键约束
-                // 避免由 cascade 或并发问题造成 embedding 意外丢失
-                personDao.resetAllEmbeddingAssignments()
-                personDao.clearAllPersons()
-
-                val allEmbeddings = personDao.getAllEmbeddingCount()
-                _progress.value = TagScanProgress(0, allEmbeddings, PipelineStage.FACE_CLUSTER)
-
-                try {
-                    runDbscanClustering(dao)
-                    val afterPersons = personDao.getAllPersons().size
-                    val afterEmbeddings = personDao.getAllEmbeddingCount()
-                    Log.i(TAG, "Pass 2 Only completed: $afterPersons persons from $afterEmbeddings embeddings")
-                    _lastScanMessage.value = "聚类完成: $afterPersons 个人物簇 (共 $afterEmbeddings 个 embedding)"
-                } catch (e: Exception) {
-                    Log.w(TAG, "Pass 2 Only failed: ${e.message}")
-                    _lastScanMessage.value = "聚类失败: ${e.message}"
-                }
-
-                _progress.value = TagScanProgress(allEmbeddings, allEmbeddings, PipelineStage.COMPLETE)
-            } finally {
-                _isScanning.value = false
-            }
-        }
+        throw NotImplementedError(
+            "scanPass2 is deprecated. Use TagScanOrchestrator.schedulePass(TagScanPass.DBSCAN)."
+        )
     }
 
     /**
      * [Pass 3 独立执行] 仅进行 Qwen 图像理解标签生成
      *
-     * - 遍历所有有 faceRoi 但无 labels 的媒体
-     * - 调用 Qwen 多模态模型生成标签
+     * @deprecated 已迁移到 [TagScanOrchestrator.schedulePass]。
      */
+    @Deprecated(
+        "Use TagScanOrchestrator.schedulePass(TagScanPass.QWEN_TAGGING) instead",
+        ReplaceWith("TagScanOrchestrator(context, this).schedulePass(TagScanPass.QWEN_TAGGING)")
+    )
     fun scanPass3(
         progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
     ) {
-        if (currentJob?.isActive == true) {
-            Log.w(TAG, "Scan already in progress, ignoring")
-            return
-        }
-
-        currentJob = scope.launch {
-            try {
-                _isScanning.value = true
-                Log.i(TAG, "=== Pass 3 Only: Qwen tagging ===")
-
-                if (!ensureModelLoaded()) return@launch
-
-                val dao = db.mediaDao()
-                val needTagging = dao.getMediaWithFaceRoiWithoutLabels()
-                val total = needTagging.size
-                var processed = 0
-
-                _progress.value = TagScanProgress(0, total, PipelineStage.QWEN_TAGGING)
-
-                for (entity in needTagging) {
-                    if (!isActive) break
-                    if (!guardCheck()) break
-
-                    try {
-                        val faceRoiJson = dao.getFaceRoiResult(entity.id)
-                        val normalized = pipeline.stage3QwenTagging(entity.uri, faceRoiJson)
-
-                        val unified = UnifiedTagResult(
-                            scene = normalized.scene,
-                            activity = normalized.activity,
-                            objects = normalized.objects,
-                            tags = normalized.tags,
-                            qwenSummary = normalized.summary
-                        )
-                        dao.updateLabels(entity.id, unifiedTagToJson(unified))
-
-                        processed++
-                        _progress.value = TagScanProgress(processed, total, PipelineStage.QWEN_TAGGING)
-                        progressCallback(processed, total)
-                        delay(getThrottleMs())
-
-                        // 批次冷却
-                        if (processed % BATCH_SIZE == 0 && processed < total) {
-                            Log.i(TAG, "Pass 3 batch cooldown after $processed/$total")
-                            delay(BATCH_COOLDOWN_MS)
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Pass 3 failed for media ${entity.id}: ${e.message}")
-                        processed++
-                    }
-                }
-
-                _progress.value = TagScanProgress(processed, total, PipelineStage.COMPLETE)
-                Log.i(TAG, "=== Pass 3 Only completed: $processed/$total ===")
-            } finally {
-                _isScanning.value = false
-                unloadLlm()
-            }
-        }
+        throw NotImplementedError(
+            "scanPass3 is deprecated. Use TagScanOrchestrator.schedulePass(TagScanPass.QWEN_TAGGING)."
+        )
     }
 
     /**
      * [Pass 3 重新生成] 清空已有标签后全量重标
      *
-     * - 调用 [resetAllLabels] 清空所有已有标签
-     * - 然后对**所有**有 faceRoi 的媒体重新运行 Qwen 标签生成
-     * - 适用于用户更新受控词表或 Prompt 后需要刷新标签
+     * @deprecated 已迁移到 [TagScanOrchestrator.schedulePass]。
      */
+    @Deprecated(
+        "Use TagScanOrchestrator.schedulePass(TagScanPass.QWEN_TAGGING, mode=FULL) instead",
+        ReplaceWith("TagScanOrchestrator(context, this).schedulePass(TagScanPass.QWEN_TAGGING, mode = FULL)")
+    )
     fun scanPass3Full(
         progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
     ) {
-        if (currentJob?.isActive == true) {
-            Log.w(TAG, "Scan already in progress, ignoring")
-            return
-        }
-
-        currentJob = scope.launch {
-            try {
-                _isScanning.value = true
-                Log.i(TAG, "=== Pass 3 Full Regeneration started ===")
-
-                if (!ensureModelLoaded()) return@launch
-
-                val dao = db.mediaDao()
-
-                // 1. 清空所有已标签，使 getMediaWithFaceRoiWithoutLabels() 返回全部
-                Log.i(TAG, "Resetting all labels for full regeneration...")
-                dao.resetAllLabels()
-
-                // 2. 现在所有有 faceRoi 的媒体都变回"无标签"状态
-                val needTagging = dao.getMediaWithFaceRoiWithoutLabels()
-                val total = needTagging.size
-                var processed = 0
-
-                _progress.value = TagScanProgress(0, total, PipelineStage.QWEN_TAGGING)
-                Log.i(TAG, "Pass 3 Full: $total media need tagging")
-
-                for (entity in needTagging) {
-                    if (!isActive) break
-                    if (!guardCheck()) break
-
-                    try {
-                        val faceRoiJson = dao.getFaceRoiResult(entity.id)
-                        val normalized = pipeline.stage3QwenTagging(entity.uri, faceRoiJson)
-
-                        val unified = UnifiedTagResult(
-                            scene = normalized.scene,
-                            activity = normalized.activity,
-                            objects = normalized.objects,
-                            tags = normalized.tags,
-                            qwenSummary = normalized.summary
-                        )
-                        dao.updateLabels(entity.id, unifiedTagToJson(unified))
-
-                        processed++
-                        _progress.value = TagScanProgress(processed, total, PipelineStage.QWEN_TAGGING)
-                        progressCallback(processed, total)
-                        delay(getThrottleMs())
-
-                        // 批次冷却
-                        if (processed % BATCH_SIZE == 0 && processed < total) {
-                            Log.i(TAG, "Pass 3 Full batch cooldown after $processed/$total")
-                            delay(BATCH_COOLDOWN_MS)
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Pass 3 Full failed for media ${entity.id}: ${e.message}")
-                        processed++
-                    }
-                }
-
-                _progress.value = TagScanProgress(processed, total, PipelineStage.COMPLETE)
-                Log.i(TAG, "=== Pass 3 Full regeneration completed: $processed/$total ===")
-                _lastScanMessage.value = "Pass 3 重新生成完成: $processed/$total 张"
-            } finally {
-                _isScanning.value = false
-                unloadLlm()
-            }
-        }
+        throw NotImplementedError(
+            "scanPass3Full is deprecated. Use TagScanOrchestrator.schedulePass(TagScanPass.QWEN_TAGGING, mode = FULL)."
+        )
     }
 
     // ═══════════════════════════════════════════════════
@@ -1186,6 +659,19 @@ class TagGenerationScheduler(
                     embedding = floatArrayToByteArray(embedding)
                 )
             )
+        }
+
+        // MobileCLIP 语义编码已内联合并到 Pass 1：在同一次任务中执行
+        try {
+            val semanticEmbedding = pipeline.stage4MobileClipEncoding(
+                uri = entity.uri,
+                mediaId = entity.id
+            )
+            if (semanticEmbedding != null) {
+                dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "MobileCLIP encoding (inline in Pass 1) failed for media ${entity.id}: ${e.message}")
         }
 
         delay(getThrottleMs())

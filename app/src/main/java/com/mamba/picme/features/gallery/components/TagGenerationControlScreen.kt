@@ -49,12 +49,8 @@ fun TagGenerationControlScreen(
 
     // ── 通过 AppContainer 观察 TAG 生成状态（Service 内部分发） ───
     val sessionProgress by app.container.tagGenerationSessionProgress.collectAsState()
+    val isScanning by app.container.tagGenerationIsScanning.collectAsState()
     val currentState = sessionProgress?.state
-    val isScanning = currentState in setOf(
-        ScanSessionState.RUNNING,
-        ScanSessionState.PAUSING,
-        ScanSessionState.CANCELLING
-    )
     val isRunning = currentState == ScanSessionState.RUNNING
     val isPausing = currentState == ScanSessionState.PAUSING
     val isPaused = currentState == ScanSessionState.PAUSED
@@ -74,27 +70,33 @@ fun TagGenerationControlScreen(
     var withSemantic by remember { mutableIntStateOf(0) }
     var personCount by remember { mutableIntStateOf(0) }
     var embeddingCount by remember { mutableIntStateOf(0) }
-    var isModelAvailable by remember { mutableStateOf(false) }
+    var remainingPass1 by remember { mutableIntStateOf(0) }
+    var remainingPass3 by remember { mutableIntStateOf(0) }
 
     // 精细控制：类别 / 时间范围 / 模式
     var selectedCategories by remember { mutableStateOf(setOf<TagCategory>()) }
     var selectedTimeRange by remember { mutableStateOf(TimeRangePreset.ALL) }
     var fullRegenerateMode by remember { mutableStateOf(false) }
 
-    // 刷新统计
+    // 刷新统计：统一通过 TagScanOrchestrator.getDbStats(db) 获取，
+    // 不依赖 Service/Orchestrator 实例，进入页面即可立即显示。
     fun refreshStats() {
         coroutineScope.launch {
             try {
-                totalMedia = db.mediaDao().getTotalCount()
-                withFace = db.mediaDao().searchByHasFace().size
-                withLabels = db.mediaDao().getTotalCount() - db.mediaDao().getUnlabeledMedia().size
-                withSemantic = db.mediaDao().getMediaWithSemanticEmbedding().size
-                personCount = db.personDao().getAllPersons().size
-                embeddingCount = db.personDao().getAllEmbeddingCount()
-                val modelDir = com.mamba.picme.data.download.ModelPathConfig.getModelDir(context, "picme-face-embedding-mnn")
-                val modelFile = java.io.File(modelDir, "w600k_mbf.mnn")
-                isModelAvailable = modelFile.exists() && modelFile.length() > 100_000
-            } catch (_: Exception) {}
+                android.util.Log.d("TagGenControl", "refreshStats() called")
+                val stats = com.mamba.picme.domain.tag.scan.TagScanOrchestrator.getDbStats(db)
+                android.util.Log.d("TagGenControl", "stats=$stats")
+                totalMedia = stats.totalMedia
+                withFace = stats.withFace
+                withLabels = stats.withLabels
+                withSemantic = stats.withSemantic
+                personCount = stats.personCount
+                embeddingCount = stats.faceEmbeddingCount
+                remainingPass1 = stats.remainingForPass1
+                remainingPass3 = stats.remainingForPass3
+            } catch (e: Exception) {
+                android.util.Log.e("TagGenControl", "refreshStats failed", e)
+            }
         }
     }
 
@@ -108,13 +110,18 @@ fun TagGenerationControlScreen(
     }
 
     // 初始加载统计
-    LaunchedEffect(Unit) { refreshStats() }
+    LaunchedEffect(Unit) {
+        android.util.Log.d("TagGenControl", "initial refreshStats()")
+        refreshStats()
+    }
 
-    // 轮询更新（扫描中进行时）
-    LaunchedEffect(isScanning) {
-        while (isScanning) {
-            delay(2000)
+    // 轮询更新数据库累计统计（每秒刷新，不依赖 isScanning 状态，便于诊断）
+    LaunchedEffect(Unit) {
+        android.util.Log.d("TagGenControl", "poll loop started")
+        while (true) {
+            android.util.Log.d("TagGenControl", "poll tick, isScanning=${app.container.tagGenerationIsScanning.value}")
             refreshStats()
+            delay(1000)
         }
     }
 
@@ -144,7 +151,7 @@ fun TagGenerationControlScreen(
                 sessionProgress?.let { ScanProgressCard(it) }
             }
 
-            // ── 数据库统计卡片 ────────────────────────────
+            // ── 数据库累计统计卡片 ────────────────────────────
             StatsCard(
                 totalMedia = totalMedia,
                 withFace = withFace,
@@ -152,7 +159,8 @@ fun TagGenerationControlScreen(
                 withSemantic = withSemantic,
                 personCount = personCount,
                 embeddingCount = embeddingCount,
-                isModelAvailable = isModelAvailable
+                remainingPass1 = remainingPass1,
+                remainingPass3 = remainingPass3
             )
 
             // ── 3-Pass 混合管道概览卡片 ────────────────
@@ -187,19 +195,18 @@ fun TagGenerationControlScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            if (personCount > 0 || !isScanning || !isModelAvailable) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
+                            if (personCount > 0 || !isScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
                             null,
                             modifier = Modifier.size(20.dp),
-                            tint = if (personCount > 0 || !isScanning || !isModelAvailable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                            tint = if (personCount > 0 || !isScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
                             Text("Pass 2: DBSCAN 全局聚类", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "$personCount 个人物簇${if (!isModelAvailable) " | ⚠️ 模型未下载" else ""}",
+                                "$personCount 个人物簇",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (!isModelAvailable) MaterialTheme.colorScheme.error
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     }
@@ -558,42 +565,6 @@ fun TagGenerationControlScreen(
                 }
             }
 
-            // ── 模型状态提示 ───────────────────────────
-            if (!isModelAvailable) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Rounded.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                "MobileFaceNet 模型未下载",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                "人脸聚类需要 w600k_mbf.mnn 模型。请在模型中心下载 picme-face-embedding-mnn 模型。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-            }
-
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -667,7 +638,7 @@ private fun ScanProgressCard(progress: TagScanSessionProgress) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "${progress.processed} / ${progress.total} 张 · 待处理 ${progress.pending} · 失败 ${progress.failed}",
+                "任务 ${progress.processed}/${progress.total} 完成 · 待处理 ${progress.pending} · 失败 ${progress.failed}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -796,12 +767,13 @@ private fun StatsCard(
     withSemantic: Int,
     personCount: Int,
     embeddingCount: Int,
-    isModelAvailable: Boolean
+    remainingPass1: Int,
+    remainingPass3: Int
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                "数据库统计",
+                "数据库累计统计",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -817,13 +789,13 @@ private fun StatsCard(
                 StatItem("人物簇", personCount.toString())
             }
             Spacer(Modifier.height(4.dp))
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
                 StatItem("Embedding", embeddingCount.toString())
-                StatItem(
-                    "MFNet模型",
-                    if (isModelAvailable) "已就绪 ✓" else "未下载 ✗",
-                    valueColor = if (isModelAvailable) Color(0xFF4CAF50) else Color(0xFFFF5722)
-                )
+                StatItem("Pass1剩余", remainingPass1.toString())
+                StatItem("Pass3剩余", remainingPass3.toString())
             }
         }
     }

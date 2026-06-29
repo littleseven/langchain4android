@@ -371,12 +371,10 @@ class TagGenerationPipeline(
     /**
      * 将 Stage 1 结果序列化为 JSON（用于 DB 持久化）
      *
-     * 无人脸时返回 null，避免 caller 误将 hasFace 标记为 true。
+     * 始终返回非 null JSON，以便 caller 能区分"已处理但无人脸"和"尚未处理"。
+     * hasFace 字段仍由 [hasValidFace] 控制，不会误标为 true。
      */
-    private fun faceRoiToJson(result: Stage1Result): String? {
-        if (!result.hasFace || result.faceCount == 0) {
-            return null
-        }
+    private fun faceRoiToJson(result: Stage1Result): String {
         return """{"hasFace":${result.hasFace},"faceCount":${result.faceCount},"isSelfie":${result.isSelfie},"isGroupPhoto":${result.isGroupPhoto}}"""
     }
 

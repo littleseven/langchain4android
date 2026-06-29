@@ -12,17 +12,21 @@ import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.data.local.AppDatabase
-import com.mamba.picme.domain.tag.TagGenerationScheduler
+import com.mamba.picme.domain.tag.scan.TagScanOrchestrator
+import com.mamba.picme.domain.tag.scan.ScanQueuePolicy
+import com.mamba.picme.domain.tag.scan.ScanSessionState
 
 /**
  * 自动 Tag 生成 Capability
  *
  * 将标签系统作为 Agent 可编排的 Capability 暴露出来。
  * 支持 Agent 通过 Tool Calling 触发全量标签扫描和查询特定照片的标签。
+ *
+ * 所有扫描统一委托给 [TagScanOrchestrator]，确保进度/统计与 UI 控制页同源。
  */
 class AutoTagCapability(
     private val context: Context,
-    private val tagScheduler: TagGenerationScheduler
+    private val orchestrator: TagScanOrchestrator
 ) : Capability {
 
     companion object {
@@ -89,9 +93,7 @@ class AutoTagCapability(
 
     private suspend fun handleScanAll(cmdId: Int): Result<AgentAction> {
         Logger.i(TAG, "Starting full tag scan")
-        tagScheduler.scanAll { processed, total ->
-            Logger.d(TAG, "Tag scan progress: $processed/$total")
-        }
+        orchestrator.scheduleAutoScan(ScanQueuePolicy())
         return Result.success(
             AgentAction.Success(
                 cmdId,
@@ -130,8 +132,12 @@ class AutoTagCapability(
     }
 
     private suspend fun handleGetProgress(cmdId: Int): Result<AgentAction> {
-        val progress = tagScheduler.progress.value
-        val scanning = tagScheduler.isScanning.value
+        val progress = orchestrator.progress.value
+        val scanning = progress?.state in setOf(
+            ScanSessionState.RUNNING,
+            ScanSessionState.PAUSING,
+            ScanSessionState.CANCELLING
+        )
         val message = if (scanning) {
             context.getString(
                 R.string.auto_tag_scanning_progress,
@@ -145,7 +151,7 @@ class AutoTagCapability(
     }
 
     private suspend fun handleCancelScan(cmdId: Int): Result<AgentAction> {
-        tagScheduler.cancel()
+        orchestrator.cancel()
         return Result.success(
             AgentAction.Success(
                 cmdId,

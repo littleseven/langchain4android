@@ -223,8 +223,8 @@ class NcnnRoiDetector(
             val faceArea = (mappedX2 - mappedX1) * (mappedY2 - mappedY1)
             val areaRatio = faceArea / imageArea
 
-            // 过滤面积 < 3% 图片总面积的脸（过小/误检）
-            if (areaRatio >= 0.03f) {
+            // 过滤面积 < 1.5% 图片总面积的脸（过小/误检），放宽以识别更多小脸
+            if (areaRatio >= 0.015f) {
                 roiList.add(RectF(mappedX1, mappedY1, mappedX2, mappedY2))
             } else {
                 Logger.d(TAG, "Filtered small face: areaRatio=${String.format("%.2f%%", areaRatio * 100)}")
@@ -234,7 +234,7 @@ class NcnnRoiDetector(
         // 按面积从大到小排序
         roiList.sortByDescending { it.width() * it.height() }
 
-        Logger.d(TAG, "NcnnRoiFaces: ${roiList.size} valid faces after filtering (min 3% area)")
+        Logger.d(TAG, "NcnnRoiFaces: ${roiList.size} valid faces after filtering (min 1.5% area)")
         return roiList
     }
 

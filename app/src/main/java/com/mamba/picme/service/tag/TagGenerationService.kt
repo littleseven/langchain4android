@@ -158,6 +158,18 @@ class TagGenerationService : Service() {
         /** 新版会话级增强进度 */
         val sessionProgress: MutableStateFlow<TagScanSessionProgress?> = MutableStateFlow(null)
 
+        /**
+         * 刷新统一数据库统计快照。
+         *
+         * 直接查询数据库，不依赖 Orchestrator 实例是否已创建，
+         * 确保 UI 即使刚进入页面或 Service 重建时也能获取统计。
+         */
+        suspend fun refreshDbStats(context: Context): com.mamba.picme.domain.tag.scan.TagScanOrchestrator.TagScanDbStats {
+            return com.mamba.picme.domain.tag.scan.TagScanOrchestrator.getDbStats(
+                com.mamba.picme.data.local.AppDatabase.getDatabase(context)
+            )
+        }
+
         private fun TagScanSessionProgress?.toLegacyProgress(): TagScanProgress? {
             if (this == null) return null
             return TagScanProgress(
@@ -364,7 +376,8 @@ class TagGenerationService : Service() {
             try { unregisterReceiver(it) } catch (_: Exception) {}
         }
         runBlocking { orchestrator?.cancel() }
-        scheduler?.cancel()
+        // scheduler 不再维护自己的扫描任务（旧入口已废弃），
+        // 取消 orchestrator 后再取消 taskDispatcher 即可完成清理。
         orchestrator = null
         scheduler = null
         orchestratorRef = null

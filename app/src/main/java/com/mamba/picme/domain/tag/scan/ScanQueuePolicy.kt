@@ -11,8 +11,8 @@ data class ScanQueuePolicy(
     /** 跳过最近 N 毫秒内已成功全量扫描的媒体 */
     val skipRecentlyTaggedMs: Long = DEFAULT_SKIP_RECENTLY_TAGGED_MS,
 
-    /** 任务排序方式 */
-    val order: QueueOrder = QueueOrder.OLDEST_FIRST,
+    /** 任务排序方式：默认 newest-first，优先处理新拍摄/新添加的照片 */
+    val order: QueueOrder = QueueOrder.NEWEST_FIRST,
 
     /** 单次自动扫描最大任务数 */
     val maxBatchSize: Int = DEFAULT_MAX_BATCH_SIZE,

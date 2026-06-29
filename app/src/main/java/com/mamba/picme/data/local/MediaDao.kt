@@ -128,8 +128,11 @@ interface MediaDao {
     @Query("SELECT * FROM media_assets WHERE faceId = :faceId ORDER BY captureDate DESC")
     suspend fun getMediaByFaceId(faceId: Int): List<MediaEntity>
 
-    /** 重置所有人脸数据（含 hasFace + faceId，用于全量重新检测+聚类） */
-    @Query("UPDATE media_assets SET hasFace = 0, faceId = NULL")
+    /** 重置所有人脸数据（含 hasFace + faceId + faceRoiResult，用于全量重新检测+聚类）
+     *
+     * 同时清空 semanticEmbedding，因为 MobileCLIP 语义编码已内联合并到 Pass 1。
+     */
+    @Query("UPDATE media_assets SET hasFace = 0, faceId = NULL, faceRoiResult = NULL, semanticEmbedding = NULL")
     suspend fun resetAllFaceData()
 
     /** 仅重置人脸聚类结果（保留 hasFace 检测标记，用于仅重新聚类） */
@@ -208,16 +211,27 @@ interface MediaDao {
     )
     suspend fun updateLastTagScan(mediaId: Long, timestamp: Long, passesJson: String)
 
-    /** 按最近扫描时间升序获取媒体（oldest-first，避免老照片饿死） */
+    /** 按拍摄时间降序获取候选媒体（newest-first） */
     @Query(
         """
         SELECT * FROM media_assets
         WHERE (lastTagScanAt IS NULL OR lastTagScanAt < :before)
-        ORDER BY lastTagScanAt ASC, captureDate ASC
+        ORDER BY captureDate DESC, lastTagScanAt ASC
         LIMIT :limit
         """
     )
-    suspend fun getMediaForIncrementalScan(before: Long, limit: Int): List<MediaEntity>
+    suspend fun getMediaForIncrementalScanNewest(before: Long, limit: Int): List<MediaEntity>
+
+    /** 按拍摄时间升序获取候选媒体（oldest-first） */
+    @Query(
+        """
+        SELECT * FROM media_assets
+        WHERE (lastTagScanAt IS NULL OR lastTagScanAt < :before)
+        ORDER BY captureDate ASC, lastTagScanAt ASC
+        LIMIT :limit
+        """
+    )
+    suspend fun getMediaForIncrementalScanOldest(before: Long, limit: Int): List<MediaEntity>
 
     /** 获取指定 ID 中最近扫描时间早于阈值的照片 */
     @Query(
