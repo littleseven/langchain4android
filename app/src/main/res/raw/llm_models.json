@@ -14,7 +14,7 @@
       "joiner-epoch-99-avg-1.int8.onnx",
       "tokens.txt"
     ],
-    "tags": ["ASR", "speech", "chinese", "english", "onnx"]
+    "tags": ["chat", "ASR", "speech", "chinese", "english", "onnx"]
   },
   {
     "id": "sherpa-onnx-kws-zipformer-wenetspeech",
@@ -32,25 +32,7 @@
       "tokens.txt",
       "keywords.txt"
     ],
-    "tags": ["KWS", "wake-word", "keyword", "always-on", "onnx"]
-  },
-  {
-    "id": "sherpa-onnx-kws-zipformer-wenetspeech",
-    "name": "Sherpa-ONNX KWS 唤醒词",
-    "description": "轻量级关键词识别模型，~14MB，支持自定义唤醒词（always-on 超低功耗）",
-    "type": "KWS",
-    "size": 14000000,
-    "sources": {
-      "ModelScope": "budaoshou/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
-    },
-    "files": [
-      "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
-      "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
-      "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
-      "tokens.txt",
-      "keywords.txt"
-    ],
-    "tags": ["KWS", "wake-word", "keyword", "always-on", "onnx"]
+    "tags": ["chat", "KWS", "wake-word", "keyword", "always-on", "onnx"]
   },
   {
     "id": "qwen3_5_0_8b",
@@ -92,7 +74,7 @@
       "visual.mnn",
       "visual.mnn.weight"
     ],
-    "tags": ["chat", "reasoning", "multilingual", "vision"]
+    "tags": ["must-have", "chat", "reasoning", "multilingual", "vision"]
   },
   {
     "id": "picme-face-det-mnn",
@@ -106,7 +88,7 @@
     "files": [
       "det_10g.mnn"
     ],
-    "tags": ["face", "detection", "mnn"]
+    "tags": ["beauty-camera", "face", "detection", "mnn"]
   },
   {
     "id": "picme-face-landmark-mnn",
@@ -120,7 +102,7 @@
     "files": [
       "2d106det.mnn"
     ],
-    "tags": ["face", "landmark", "mnn"]
+    "tags": ["must-have", "beauty-camera", "face", "landmark", "mnn"]
   },
   {
     "id": "picme-face-det-ncnn",
@@ -135,7 +117,7 @@
       "det_10g.param",
       "det_10g.bin"
     ],
-    "tags": ["face", "detection", "ncnn"]
+    "tags": ["beauty-camera", "face", "detection", "ncnn"]
   },
   {
     "id": "picme-face-landmark-ncnn",
@@ -150,7 +132,7 @@
       "2d106det.param",
       "2d106det.bin"
     ],
-    "tags": ["face", "landmark", "ncnn"]
+    "tags": ["beauty-camera", "face", "landmark", "ncnn"]
   },
   {
     "id": "picme-face-det-500m-mnn",
@@ -164,7 +146,7 @@
     "files": [
       "det_500m.mnn"
     ],
-    "tags": ["face", "detection", "mnn"]
+    "tags": ["must-have", "beauty-camera", "face", "detection", "mnn"]
   },
   {
     "id": "picme-face-embedding-mnn",
@@ -178,7 +160,7 @@
     "files": [
       "w600k_mbf.mnn"
     ],
-    "tags": ["face", "embedding", "mnn", "mobilefacenet"]
+    "tags": ["must-have", "beauty-camera", "face", "embedding", "mnn", "mobilefacenet"]
   },
   {
     "id": "picme-face-det-500m-ncnn",
@@ -193,7 +175,7 @@
       "det_500m.param",
       "det_500m.bin"
     ],
-    "tags": ["face", "detection", "ncnn"]
+    "tags": ["beauty-camera", "face", "detection", "ncnn"]
   },
   {
     "id": "mobileclip-mnn",
@@ -213,7 +195,7 @@
       "vocab.txt",
       "merges.txt"
     ],
-    "tags": ["vision", "clip", "mnn", "semantic"]
+    "tags": ["must-have", "photo-tagging", "vision", "clip", "mnn", "semantic"]
   },
   {
     "id": "opus-mt-zh-en",
@@ -233,6 +215,6 @@
       "source.spm",
       "target.spm"
     ],
-    "tags": ["translation", "chinese", "english", "onnx", "nlp"]
+    "tags": ["must-have", "photo-tagging", "translation", "chinese", "english", "onnx", "nlp"]
   }
 ]

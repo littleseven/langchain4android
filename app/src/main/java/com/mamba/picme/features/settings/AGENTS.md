@@ -96,19 +96,34 @@
 - [ ] 是否支持深色模式？（使用 MaterialTheme.colorScheme）
 - [ ] 设置变更是否实时生效？（通过 Flow 自动通知订阅者）
 
-### 2.6 模型管理（2026-05 新增，2026-06 统一）
+### 2.6 模型管理（2026-05 新增，2026-06 按服务功能重分类）
 
 **统一模型中心**
-- **入口**：`ModelCenterScreen`，从设置页统一入口进入
+- **入口**：`ModelCenterScreen`，从设置页「AI 助手」卡片「模型中心」进入
+- **顶部分类（按 PicMe 服务功能划分）**：
+  - **必须**：核心运行必须模型，提供一键下载缺失模型队列
+  - **聊天**：本地 LLM + ASR/KWS（文字、语音、多模态对话）
+  - **相册打标**：MobileCLIP、OPUS-MT 等语义标签/搜索模型
+  - **美颜相机**：人脸检测、关键点、Embedding 等美颜/人脸模型
 - **功能**：
-  - 统一管理所有本地模型（LLM、ASR、人脸检测等）
-  - 查看模型列表（按分类 Tab 切换）
+  - 统一管理所有本地模型
+  - 按服务功能分类 Tab 浏览
+  - **必须分类一键下载**：`downloadAllRequiredModels()` 将未下载的必须模型依次加入 `LlmModelDownloadManager` 队列
   - 下载新模型（从 ModelScope 远程仓库）
   - 删除本地模型释放空间
   - 查看模型属性（JSON 格式，支持复制）
 - **存储路径**：应用私有目录 `files/llm_models/{modelId}/`
-- **下载管理**：`LlmModelDownloadManager` 支持断点续传和进度回调
-- **模型配置**：`res/raw/llm_models.json` 定义所有可用模型的元数据
+- **下载管理**：`LlmModelDownloadManager` 支持断点续传、暂停和进度回调
+- **模型配置**：`res/raw/llm_models.json` 定义所有可用模型的元数据；每个模型通过 `tags` 中的服务功能标签（`must-have` / `chat` / `voice` / `photo-tagging` / `beauty-camera`）决定所属分类
+- **必须模型清单（`ModelConfig.REQUIRED_MODEL_IDS`）**：
+  - `qwen3_5_2b`（本地 LLM，文字/多模态对话）
+  - `sherpa-onnx-zipformer-zh-en`（ASR，语音输入）
+  - `sherpa-onnx-kws-zipformer-wenetspeech`（KWS，唤醒词）
+  - `picme-face-det-500m-mnn`（默认人脸检测，Det10G 已降级为可选）
+  - `picme-face-landmark-mnn`（人脸关键点）
+  - `picme-face-embedding-mnn`（人脸聚类/识别）
+  - `mobileclip-mnn`（语义搜索/相册打标）
+  - `opus-mt-zh-en`（中文查询翻译）
 
 **Agent 模式设置**
 - **本地模式**：仅使用本地模型（默认 Qwen3.5-2B）

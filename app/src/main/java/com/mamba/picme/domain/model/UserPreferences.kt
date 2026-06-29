@@ -211,16 +211,12 @@ value class ModelCategory(val tag: String) {
         /** 所有模型（无标签过滤） */
         val ALL = ModelCategory("All")
 
-        /** 预置的常见分类，用于本地缓存缺失时的默认展示 */
+        /** 预置的服务功能分类，用于本地缓存缺失时的默认展示 */
         val DEFAULT_CATEGORIES = listOf(
-            ModelCategory("Think"),
-            ModelCategory("Vision"),
-            ModelCategory("Audio"),
-            ModelCategory("Code"),
-            ModelCategory("Math"),
-            ModelCategory("ImageGen"),
-            ModelCategory("AudioGen"),
-            ModelCategory("Chat")
+            ModelCategory("must-have"),
+            ModelCategory("chat"),
+            ModelCategory("photo-tagging"),
+            ModelCategory("beauty-camera")
         )
     }
 

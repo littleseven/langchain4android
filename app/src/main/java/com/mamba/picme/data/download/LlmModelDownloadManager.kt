@@ -141,29 +141,21 @@ class LlmModelDownloadManager(context: Context) {
         )
 
         /**
-         * 默认标签翻译（MNN 官方 tagTranslations 的本地回退）
+         * 默认标签翻译（按 PicMe 服务功能划分的分类标签）
          */
         val DEFAULT_TAG_TRANSLATIONS = mapOf(
+            "must-have" to "必须",
+            "chat" to "聊天",
+            "photo-tagging" to "相册打标",
+            "beauty-camera" to "美颜相机",
+            // 保留底层技术标签的翻译，用于模型卡片徽章展示
             "face" to "人脸检测",
-            "chat" to "对话",
-            "Chat" to "对话",
             "Vision" to "图像理解",
-            "Video" to "视频理解",
             "Audio" to "音频理解",
-            "Code" to "代码",
-            "Math" to "数学",
-            "ImageGen" to "文生图",
-            "AudioGen" to "音频生成",
-            "Think" to "深度思考",
-            "Safety" to "安全",
-            "NPU" to "NPU加速",
             "ASR" to "语音识别",
             "KWS" to "唤醒词",
             "TTS" to "语音合成",
             "detection" to "人脸检测",
-            "mnn" to "MNN模型",
-            "ncnn" to "NCNN模型",
-            "onnx" to "ONNX模型",
             "landmark" to "人脸关键点",
             "speech" to "语音模型",
             "wake-word" to "唤醒词",
@@ -1302,14 +1294,18 @@ data class ModelConfig(
 ) {
     companion object {
         /**
-         * 必须模型 ID 集合（MNN ROI、MNN 2D106、MNN MobileFaceNet、Qwen3.5-2B）
+         * 必须模型 ID 集合
+         * Det10G 已降级为可选，Det500M 成为默认人脸检测必须模型。
          */
         val REQUIRED_MODEL_IDS = setOf(
-            "picme-face-det-mnn",       // MNN ROI (Det10G)
+            "qwen3_5_2b",                // 本地 LLM（文字/多模态对话）
+            "sherpa-onnx-zipformer-zh-en", // ASR（语音输入）
+            "sherpa-onnx-kws-zipformer-wenetspeech", // KWS（唤醒词）
             "picme-face-det-500m-mnn",  // MNN ROI (Det500M)
             "picme-face-landmark-mnn",  // MNN 2D106
             "picme-face-embedding-mnn", // MNN MobileFaceNet
-            "qwen3_5_2b"                // Qwen3.5-2B
+            "mobileclip-mnn",           // 语义搜索/相册打标
+            "opus-mt-zh-en"             // 中文查询翻译
         )
     }
 
@@ -1350,42 +1346,57 @@ data class ModelMarketData(
     val tagTranslations: TagTranslations
 ) {
     /**
-     * 获取所有可用的分类标签（按 tagTranslations 顺序）
+     * 服务功能分类标签集合（用于顶部 Tab 分类）
+     * 语音助手已合并入聊天分类。
+     */
+    private val serviceCategoryTags = listOf("must-have", "chat", "photo-tagging", "beauty-camera")
+
+    /**
+     * 获取所有可用的服务功能分类标签
      */
     fun getCategories(): List<ModelCategory> {
-        val allTags = models.flatMap { it.tags }.toSet()
-        // 按 tagTranslations 中定义的顺序排列
-        val ordered = tagTranslations.keys
-            .filter { it in allTags }
+        val categories = serviceCategoryTags
+            .filter { tag -> models.any { tag in it.tags } }
             .map { ModelCategory(it) }
-        // 补充未在 tagTranslations 中定义的标签
-        val remaining = allTags
-            .filter { it !in tagTranslations.keys }
-            .map { ModelCategory(it) }
-        return ordered + remaining
+            .toMutableList()
+
+        // 未分类的模型放入 "All"
+        val assignedIds = categories.flatMap { category ->
+            if (category.tag == "must-have") {
+                models.filter { it.isRequired }.map { it.id }
+            } else {
+                models.filter { category.tag in it.tags }.map { it.id }
+            }
+        }.toSet()
+        val unassigned = models.filter { it.id !in assignedIds }
+        if (unassigned.isNotEmpty()) {
+            categories.add(ModelCategory.ALL)
+        }
+
+        return categories
     }
 
     /**
-     * 按分类标签分组模型
+     * 按服务功能分类标签分组模型
+     * 允许同一模型出现在多个分类中（如 must-have + beauty-camera）。
      */
     fun groupByCategory(): Map<ModelCategory, List<ModelConfig>> {
-        val categories = getCategories()
         val result = mutableMapOf<ModelCategory, List<ModelConfig>>()
 
-        // 每个模型放入其第一个匹配的分类
-        val assigned = mutableSetOf<String>()
-        for (category in categories) {
-            val categoryModels = models.filter { model ->
-                model.id !in assigned && category.tag in model.tags
+        for (categoryTag in serviceCategoryTags) {
+            val categoryModels = if (categoryTag == "must-have") {
+                models.filter { it.isRequired }
+            } else {
+                models.filter { categoryTag in it.tags }
             }
             if (categoryModels.isNotEmpty()) {
-                result[category] = categoryModels
-                assigned.addAll(categoryModels.map { it.id })
+                result[ModelCategory(categoryTag)] = categoryModels
             }
         }
 
         // 未分类的放入 "All"
-        val unassigned = models.filter { it.id !in assigned }
+        val assignedIds = result.values.flatten().map { it.id }.toSet()
+        val unassigned = models.filter { it.id !in assignedIds }
         if (unassigned.isNotEmpty()) {
             result[ModelCategory.ALL] = unassigned
         }

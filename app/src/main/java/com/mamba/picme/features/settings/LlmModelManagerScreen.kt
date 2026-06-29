@@ -38,8 +38,14 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Functions
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Audiotrack
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Photo
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 
@@ -101,14 +107,20 @@ import com.mamba.picme.data.download.DownloadState
  */
 @Composable
 internal fun getCategoryIcon(tag: String): ImageVector {
-    return when (tag) {
-        "Vision" -> Icons.Outlined.Visibility
-        "Think" -> Icons.Outlined.SmartToy
-        "Audio", "AudioGen" -> Icons.Outlined.Audiotrack
-        "ImageGen" -> Icons.Outlined.Image
-        "Code" -> Icons.Outlined.Code
-        "Math" -> Icons.Outlined.Functions
-        "Chat" -> Icons.AutoMirrored.Outlined.Chat
+    return when (tag.lowercase()) {
+        "must-have" -> Icons.Outlined.Star
+        "chat" -> Icons.AutoMirrored.Outlined.Chat
+        "photo-tagging" -> Icons.Outlined.Photo
+        "beauty-camera" -> Icons.Outlined.CameraAlt
+        // 保留旧标签兼容
+        "voice" -> Icons.Outlined.Mic
+        "vision" -> Icons.Outlined.Visibility
+        "think" -> Icons.Outlined.SmartToy
+        "audio", "audiogen" -> Icons.Outlined.Audiotrack
+        "imagegen" -> Icons.Outlined.Image
+        "code" -> Icons.Outlined.Code
+        "math" -> Icons.Outlined.Functions
+        "face" -> Icons.Outlined.Face
         else -> Icons.Outlined.Palette
     }
 }
@@ -124,19 +136,20 @@ fun ModelCenterScreen(
     val currentTab by viewModel.currentTab.collectAsState()
     val modelTypeLabels = viewModel.getModelTypeLabels()
     val downloadStates by viewModel.downloadStates.collectAsState()
+    val downloadedModels by viewModel.downloadedModels.collectAsState()
     val tagTranslations by viewModel.tagTranslations.collectAsState()
     var modelToDelete by remember { mutableStateOf<ModelConfig?>(null) }
     var modelToShowProperties by remember { mutableStateOf<ModelConfig?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val coroutineScope = rememberCoroutineScope()
+    val isMustHaveTab = currentTab.tag.equals("must-have", ignoreCase = true)
 
-    // 根据传入的初始标签设置当前 Tab（三个入口写死映射）
+    // 根据传入的初始标签设置当前 Tab（按服务功能映射）
     LaunchedEffect(initialCategoryTag, modelTypeLabels) {
         if (initialCategoryTag.isNotBlank() && modelTypeLabels.isNotEmpty()) {
             val targetCategory = when (initialCategoryTag) {
-                "Chat" -> modelTypeLabels.keys.find { it.tag.equals("chat", ignoreCase = true) || it.tag.equals("Chat", ignoreCase = true) }
-                "Audio" -> modelTypeLabels.keys.find { it.tag.equals("ASR", ignoreCase = true) || it.tag.equals("Audio", ignoreCase = true) }
-                "Vision" -> modelTypeLabels.keys.find { it.tag.equals("face", ignoreCase = true) || it.tag.equals("Vision", ignoreCase = true) }
+                "Chat", "Audio" -> modelTypeLabels.keys.find { it.tag.equals("chat", ignoreCase = true) }
+                "Vision" -> modelTypeLabels.keys.find { it.tag.equals("beauty-camera", ignoreCase = true) }
                 else -> modelTypeLabels.keys.find { it.tag.equals(initialCategoryTag, ignoreCase = true) }
             }
             if (targetCategory != null) {
@@ -183,11 +196,23 @@ fun ModelCenterScreen(
             if (currentModels.isEmpty()) {
                 EmptyModelList()
             } else {
+                val downloadedIds = downloadedModels.map { it.id }.toSet()
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (isMustHaveTab) {
+                        item(key = "must-have-header") {
+                            val missingCount = currentModels.count { it.id !in downloadedIds }
+                            MustHaveHeaderCard(
+                                requiredCount = currentModels.size,
+                                missingCount = missingCount,
+                                onDownloadAll = { viewModel.downloadAllRequiredModels() }
+                            )
+                        }
+                    }
+
                     items(currentModels) { model ->
                         val downloadState = downloadStates[model.id]
                         val isPaused = downloadState?.status == DownloadStatus.PAUSED
@@ -344,18 +369,74 @@ internal fun EmptyModelList() {
 }
 
 /**
+ * 必须模型分类顶部卡片：展示必须模型汇总并提供一键下载
+ */
+@Composable
+internal fun MustHaveHeaderCard(
+    requiredCount: Int,
+    missingCount: Int,
+    onDownloadAll: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.model_label_required),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.must_have_models_summary, requiredCount, missingCount),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+            )
+            if (missingCount > 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = onDownloadAll,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.download_all_missing))
+                }
+            }
+        }
+    }
+}
+
+/**
  * 根据标签获取对应的颜色
  */
 @Composable
 internal fun getTagColor(tag: String): Color {
-    return when (tag) {
-        "Think" -> MaterialTheme.colorScheme.primary
-        "Vision" -> MaterialTheme.colorScheme.tertiary
-        "Audio", "AudioGen" -> MaterialTheme.colorScheme.secondary
-        "ImageGen" -> Color(0xFF9C27B0)
-        "Code" -> Color(0xFF2196F3)
-        "Math" -> Color(0xFFFF9800)
-        "Chat" -> MaterialTheme.colorScheme.primary
+    return when (tag.lowercase()) {
+        "must-have" -> Color(0xFFE53935)
+        "chat" -> MaterialTheme.colorScheme.primary
+        "photo-tagging" -> Color(0xFF9C27B0)
+        "beauty-camera" -> MaterialTheme.colorScheme.tertiary
+        // 保留旧标签兼容
+        "voice" -> MaterialTheme.colorScheme.secondary
+        "think" -> MaterialTheme.colorScheme.primary
+        "vision" -> MaterialTheme.colorScheme.tertiary
+        "audio", "audiogen" -> MaterialTheme.colorScheme.secondary
+        "imagegen" -> Color(0xFF9C27B0)
+        "code" -> Color(0xFF2196F3)
+        "math" -> Color(0xFFFF9800)
+        "face" -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.outline
     }
 }

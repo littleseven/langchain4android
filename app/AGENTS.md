@@ -42,7 +42,7 @@ di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 | `DuplicateManager` | `duplicate_manager` | 相册功能子页 — 重复/相似照片扫描与删除，从 Settings「相册功能」卡片进入 |
 | `Debug` | `debug` | 开发工具 — 日志、截图、样本数据生成 |
 
-> **2026-06 产品重心转移**：Gallery 为默认首页，Camera/Chat/ModelCenter 作为纯图标入口从 Gallery 底部悬浮 Tab 进入，Settings 从顶部栏进入；Model Center 内置于 Settings 的 AI 助手卡片第一项，重复照片管理内置于 Settings 的相册功能卡片；Camera 降级为辅助入口。详见 `PRODUCT.md`。
+> **2026-06 产品重心转移**：Gallery 为默认首页，Camera/Chat/ModelCenter 作为纯图标入口从 Gallery 底部悬浮 Tab 进入，Settings 从顶部栏进入；Model Center 内置于 Settings 的 AI 助手卡片第一项，分类按服务功能（必须/聊天/相册打标/美颜相机）重排，聊天分类聚合文字与语音模型，并提供必须模型一键下载；重复照片管理内置于 Settings 的相册功能卡片；Camera 降级为辅助入口。详见 `PRODUCT.md`。
 
 ### 1.3 关键入口文件
 

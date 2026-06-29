@@ -500,6 +500,21 @@ private val ESSENTIAL_MODEL_IDS = listOf(
         modelDownloadManager.enqueueDownload(modelId, modelConfig)
     }
 
+    /**
+     * 一键下载所有未下载的必须模型，按顺序加入下载队列
+     */
+    fun downloadAllRequiredModels() {
+        viewModelScope.launch {
+            val requiredModels = _allModels.value.filter { it.isRequired }
+            val downloadedIds = modelDownloadManager.getDownloadedModels().map { it.id }.toSet()
+            val missingModels = requiredModels.filter { it.id !in downloadedIds }
+            Logger.i("Settings", "Batch downloading ${missingModels.size} required models")
+            missingModels.forEach { model ->
+                modelDownloadManager.enqueueDownload(model.id, model)
+            }
+        }
+    }
+
     fun resumeModelDownload(modelId: String, modelConfig: ModelConfig) {
         modelDownloadManager.enqueueResume(modelId, modelConfig)
     }
