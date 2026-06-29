@@ -6,6 +6,7 @@ import com.mamba.picme.data.download.ModelPathConfig
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.text.Normalizer
 import java.util.regex.Pattern
 
 /**
@@ -67,9 +68,14 @@ class MobileClipTokenizer(context: Context) {
     /** 字节到 Unicode 字符的映射（用于 BPE 处理字节序列） */
     private val byteEncoder: Map<Int, String> by lazy { buildByteEncoder() }
 
-    /** 预编译的正则：GPT-2 / CLIP 风格，保留前导空格作为 token 的一部分 */
+    /**
+     * 预编译的正则：Hugging Face CLIPTokenizer 的 Split pre-tokenizer。
+     *
+     * 注意：该 pattern 不保留前导空格，空格由 ByteLevel pre-tokenizer 处理；
+     * 与 GPT-2 tokenizer 不同，CLIP 模型使用 `</w>` 词尾标记。
+     */
     private val preTokenizePattern: Pattern by lazy {
-        Pattern.compile("""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        Pattern.compile("""'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""")
     }
 
     /**
@@ -250,48 +256,55 @@ class MobileClipTokenizer(context: Context) {
     }
 
     /**
-     * 文本规范化：NFC 规范化、小写、去除多余空格
+     * 文本规范化：NFC 规范化、合并空白、小写。
+     *
+     * MobileCLIP 配套 tokenizer.json 的 normalizer 明确包含 Lowercase，
+     * vocab 中也只包含小写形式（如 "usb</w>"、"iphone</w>"）。
+     * 因此必须 lowercase，否则 "USB" / "iPhone" 等词会全部退化为字节级 token。
      */
     private fun normalizeText(text: String): String {
-        return text
+        return Normalizer.normalize(text, Normalizer.Form.NFC)
             .trim()
             .lowercase()
             .replace(Regex("\\s+"), " ")
     }
 
     /**
-     * 预分词：GPT-2 / CLIP 风格，保留带前导空格的 token
+     * 预分词：按 CLIP Split pattern 切分，ByteLevel 空格处理交给 BPE 阶段的 byte encoder。
      */
     private fun preTokenize(text: String): List<String> {
         val matcher = preTokenizePattern.matcher(text)
         val words = mutableListOf<String>()
         while (matcher.find()) {
             val match = matcher.group()
-            // 过滤纯空白（如行尾空格），保留带内容的 token
             if (match.isNotBlank()) {
                 words.add(match)
             }
         }
-        return words.ifEmpty { listOf(text) }
+        return words
     }
 
     /**
-     * 对单个 pretoken 进行 BPE 编码
+     * 对单个 pretoken 进行 BPE 编码（CLIP 风格：结尾附加 `</w>`）。
      */
     private fun bpeEncode(token: String): List<Long> {
         if (token.isEmpty()) return emptyList()
 
         // 1. Byte encoder：将字节映射为 GPT-2 / CLIP 风格的 Unicode 字符
-        val encodedToken = token.encodeToByteArray()
+        val encodedChars = token.encodeToByteArray()
             .map { byteEncoder[it.toInt() and 0xFF] ?: "" }
-            .joinToString("")
+            .toMutableList()
 
-        if (encodedToken.isEmpty()) return emptyList()
+        if (encodedChars.isEmpty()) return emptyList()
 
-        // 2. 标准 BPE 合并
-        val bpeTokens = bpeMerge(encodedToken)
+        // 2. CLIP BPE：先把 `</w>` 附加到最后一个字符，再参与 BPE 合并。
+        // 这与 GPT-2（不加 </w>）和 RoBERTa（加 Ġ 前缀）都不同。
+        encodedChars[encodedChars.size - 1] += "</w>"
 
-        // 3. 映射为 token IDs
+        // 3. 标准 BPE 合并
+        val bpeTokens = bpeMerge(encodedChars)
+
+        // 4. 映射为 token IDs
         val tokenIds = mutableListOf<Long>()
         for (bpeToken in bpeTokens) {
             val id = vocab[bpeToken]
@@ -307,16 +320,16 @@ class MobileClipTokenizer(context: Context) {
     /**
      * 标准 BPE 合并：按 merges.txt / tokenizer.json 中的优先级逐步合并字符对。
      *
-     * 与 OpenAI GPT-2 / CLIP 算法一致：
-     * 1. 每个字符（byte encoder 后的 Unicode 字符）作为一个 token
+     * 算法与 Hugging Face tokenizers BPE 一致：
+     * 1. 每个 byte encoder 后的 Unicode 字符作为一个 token
      * 2. 每次选择优先级最高（rank 最小）且存在于 mergeRanks 的相邻 pair
      * 3. 将该 pair 在整词中全部合并为单个 token
      * 4. 重复直到没有可合并的 pair
      */
-    private fun bpeMerge(token: String): List<String> {
-        if (token.length <= 1) return token.map { it.toString() }
+    private fun bpeMerge(tokens: List<String>): List<String> {
+        if (tokens.size <= 1) return tokens
 
-        var word = token.map { it.toString() }
+        var word = tokens.toMutableList()
 
         fun getPairs(tokens: List<String>): Set<Pair<String, String>> {
             val pairs = mutableSetOf<Pair<String, String>>()
@@ -356,7 +369,13 @@ class MobileClipTokenizer(context: Context) {
     }
 
     /**
-     * 截断或填充到固定长度
+     * 截断或填充到固定长度。
+     *
+     * 使用模型配套的 pad token（通常为 "!"，id=0）。
+     * CLIP text encoder 从 EOS 位置取特征，因此 pad token 的具体值不影响最终 embedding，
+     * 但需与训练时保持一致。
+     *
+     * 截断时保留末尾 EOS：先取前 maxLength-1 个 token，再追加 EOS。
      */
     private fun padOrTruncate(tokenIds: List<Long>, maxLength: Int): List<Long> {
         return when {

@@ -25,6 +25,8 @@ import com.mamba.picme.domain.tag.i18n.ChineseQueryTranslator
  * @param mediaDao 媒体数据访问对象
  * @param mobileClipEngine MobileCLIP 编码引擎（外部注入，可复用已有实例）
  */
+private const val SEMANTIC_EMBEDDING_DIM = 512
+
 class SemanticSearchEngine(
     private val context: Context,
     private val mediaDao: MediaDao,
@@ -33,7 +35,6 @@ class SemanticSearchEngine(
 ) {
     companion object {
         private const val TAG = "SemanticSearchEngine"
-        private const val EMBEDDING_DIM = 512
     }
 
     /** Tokenizer（延迟加载） */
@@ -51,9 +52,9 @@ class SemanticSearchEngine(
         queryTranslator ?: ChineseQueryTranslator(context)
     }
 
-    /** 引擎是否已初始化（含模型加载和 tokenizer 加载） */
+    /** 引擎是否已初始化（vision/text 模型 + tokenizer 均就绪，可用于文本语义搜索） */
     val isReady: Boolean
-        get() = engine.isInitialized && tokenizer.isReady()
+        get() = engine.isInitialized && engine.isTextLoaded && tokenizer.isReady()
 
     /**
      * 初始化引擎（加载模型和 tokenizer）
@@ -192,6 +193,10 @@ class SemanticSearchEngine(
             .mapNotNull { entity ->
                 val candidateEmbedding = base64ToFloatArray(entity.semanticEmbedding) ?: return@mapNotNull null
                 val similarity = engine.cosineSimilarity(imageEmbedding, candidateEmbedding)
+                if (similarity.isNaN()) {
+                    Log.w(TAG, "NaN similarity for mediaId=${entity.id}")
+                    return@mapNotNull null
+                }
                 SemanticScoredMedia(entity.toDomain(), similarity)
             }
             .sortedByDescending { it.score }
@@ -235,31 +240,57 @@ class SemanticSearchEngine(
     /**
      * 根据结构化过滤条件获取候选集
      *
-     * 当前实现：组合时间范围 + 人脸过滤，与语义搜索叠加
+     * 语义召回层必须尊重所有结构化过滤条件，否则无关图片可能因 CLIP 相似度偏高进入最终结果。
+     * 当前实现：组合时间范围 / 关键词 / OCR / 地点 / 人脸过滤，再与语义搜索叠加。
      */
     private suspend fun getFilteredCandidates(filter: StructuredFilter): List<MediaEntity> {
-        val candidates = mutableListOf<MediaEntity>()
+        // 1. 基础候选集：优先用时间范围缩小，否则取全量有 embedding 的
+        val candidates = if (filter.timeRange != null) {
+            mediaDao.searchByTimeRange(filter.timeRange.startMs, filter.timeRange.endMs)
+                .filter { !it.semanticEmbedding.isNullOrBlank() }
+        } else {
+            mediaDao.getMediaWithSemanticEmbedding()
+        }.distinctBy { it.id }
 
-        // 时间范围过滤（最优先，通常能大幅缩小范围）
-        val timeRange = filter.timeRange
-        if (timeRange != null) {
-            candidates.addAll(
-                mediaDao.searchByTimeRange(timeRange.startMs, timeRange.endMs)
-                    .filter { !it.semanticEmbedding.isNullOrBlank() }
-            )
+        if (candidates.isEmpty()) return emptyList()
+
+        // 2. 在候选集上应用剩余结构化过滤
+        return candidates.filter { entity ->
+            // 人脸过滤
+            if (filter.hasFaces == true && !entity.hasFace) return@filter false
+
+            // 通用关键词：匹配 labels / fileName（大小写不敏感）
+            if (!filter.keywords.isNullOrEmpty()) {
+                val haystack = buildString {
+                    append(entity.labels.orEmpty())
+                    append(entity.fileName.orEmpty())
+                }.lowercase()
+                val matched = filter.keywords.any { keyword ->
+                    keyword.isNotBlank() && haystack.contains(keyword.lowercase())
+                }
+                if (!matched) return@filter false
+            }
+
+            // OCR 关键词
+            if (!filter.ocrKeywords.isNullOrEmpty()) {
+                val ocr = entity.ocrText.orEmpty().lowercase()
+                val matched = filter.ocrKeywords.any { keyword ->
+                    keyword.isNotBlank() && ocr.contains(keyword.lowercase())
+                }
+                if (!matched) return@filter false
+            }
+
+            // 地点关键词
+            if (!filter.locationKeywords.isNullOrEmpty()) {
+                val location = entity.locationName.orEmpty().lowercase()
+                val matched = filter.locationKeywords.any { keyword ->
+                    keyword.isNotBlank() && location.contains(keyword.lowercase())
+                }
+                if (!matched) return@filter false
+            }
+
+            true
         }
-
-        // 如果无时间过滤，获取全量有 embedding 的
-        if (candidates.isEmpty()) {
-            candidates.addAll(mediaDao.getMediaWithSemanticEmbedding())
-        }
-
-        // 人脸过滤（在已有候选集上筛选）
-        if (filter.hasFaces == true) {
-            candidates.retainAll { it.hasFace }
-        }
-
-        return candidates.distinctBy { it.id }
     }
 
     /**
@@ -289,8 +320,8 @@ data class SemanticScoredMedia(
 /**
  * Base64 编码的 semanticEmbedding → FloatArray 反序列化
  *
- * 编码方案（小端序 float32）：
- * FloatArray → ByteArray（每 float 4 bytes，小端序）→ Base64.NO_WRAP
+ * 编码方案（大端序 float32）：
+ * FloatArray → ByteArray（每 float 4 bytes，MSB 先写）→ Base64.NO_WRAP
  */
 private fun base64ToFloatArray(base64String: String?): FloatArray? {
     if (base64String.isNullOrBlank()) return null
@@ -303,6 +334,11 @@ private fun base64ToFloatArray(base64String: String?): FloatArray? {
         }
 
         val floatCount = bytes.size / 4
+        if (floatCount != SEMANTIC_EMBEDDING_DIM) {
+            Log.w("SemanticSearchEngine", "Invalid embedding dimension: $floatCount, expected $SEMANTIC_EMBEDDING_DIM")
+            return null
+        }
+
         FloatArray(floatCount) { i ->
             val b0 = bytes[i * 4].toInt() and 0xFF
             val b1 = bytes[i * 4 + 1].toInt() and 0xFF

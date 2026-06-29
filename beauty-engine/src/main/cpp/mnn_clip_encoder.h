@@ -56,7 +56,7 @@ public:
 
     /**
      * 编码文本（token IDs）
-     * @param tokenIds 输入 token ID 数组（int64），长度通常为 77
+     * @param tokenIds 输入 token ID 数组（调用方传 int64，内部按 int32 写入 MNN 张量），长度通常为 77
      * @param tokenCount token 数量
      * @return 512 维 L2 归一化 embedding，失败返回空 vector
      */

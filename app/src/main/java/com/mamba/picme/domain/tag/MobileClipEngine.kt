@@ -39,9 +39,13 @@ class MobileClipEngine(
     val isModelReady: Boolean
         get() = ModelPathConfig.isMobileClipModelReady(context)
 
-    /** 引擎是否已初始化（模型已加载） */
+    /** 引擎是否已初始化（vision 模型已加载，可用于图像编码） */
     val isInitialized: Boolean
         get() = encoder?.isVisionLoaded == true
+
+    /** text 模型是否已加载（文本→图像语义搜索需要） */
+    val isTextLoaded: Boolean
+        get() = encoder?.isTextLoaded == true
 
     private val visionModelFile: File
         get() = File(ModelPathConfig.getMobileClipModelDir(context), VISION_MODEL_NAME)

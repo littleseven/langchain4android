@@ -112,7 +112,7 @@ class MobileClipEncoder private constructor(
     /**
      * 编码图像为 512 维 embedding
      *
-     * @param bitmap 输入 Bitmap（任意尺寸，内部缩放到 256x256）
+     * @param bitmap 输入 Bitmap（任意尺寸，内部按 CLIP 标准：短边缩放到 256 后中心裁剪 256x256）
      * @return 512 维 L2 归一化 embedding，失败返回 null
      */
     fun encodeImage(bitmap: Bitmap): FloatArray? {
@@ -125,15 +125,13 @@ class MobileClipEncoder private constructor(
             return null
         }
 
-        // 缩放到 256x256
-        val resized = if (bitmap.width != VISION_INPUT_SIZE || bitmap.height != VISION_INPUT_SIZE) {
-            Bitmap.createScaledBitmap(bitmap, VISION_INPUT_SIZE, VISION_INPUT_SIZE, true)
-        } else bitmap
+        // CLIP 标准预处理：保持宽高比，短边 -> 256，中心裁剪 256x256
+        val cropped = createCenterCroppedBitmap(bitmap, VISION_INPUT_SIZE)
 
         try {
-            val pixelCount = resized.width * resized.height
+            val pixelCount = cropped.width * cropped.height
             val pixels = IntArray(pixelCount)
-            resized.getPixels(pixels, 0, resized.width, 0, 0, resized.width, resized.height)
+            cropped.getPixels(pixels, 0, cropped.width, 0, 0, cropped.width, cropped.height)
 
             // ARGB -> RGB DirectByteBuffer
             val rgbBuffer = ByteBuffer.allocateDirect(pixelCount * 3)
@@ -146,11 +144,38 @@ class MobileClipEncoder private constructor(
             }
 
             return MnnGlobalReleaseLock.withOperation {
-                nativeEncodeImage(nativeHandle, rgbBuffer, resized.width, resized.height)
+                nativeEncodeImage(nativeHandle, rgbBuffer, cropped.width, cropped.height)
             }
         } finally {
-            if (resized !== bitmap) resized.recycle()
+            if (cropped !== bitmap) cropped.recycle()
         }
+    }
+
+    /**
+     * CLIP 标准图像预处理：resize 短边到 targetSize，中心裁剪 targetSize x targetSize。
+     *
+     * 避免直接拉伸非正方形图片导致物体比例失真，影响 embedding 准确性。
+     */
+    private fun createCenterCroppedBitmap(source: Bitmap, targetSize: Int): Bitmap {
+        val width = source.width
+        val height = source.height
+        if (width == targetSize && height == targetSize) return source
+
+        val scale = targetSize.toFloat() / kotlin.math.min(width, height)
+        val scaledWidth = (width * scale).toInt()
+        val scaledHeight = (height * scale).toInt()
+
+        // 若源图已是正方形且尺寸不同，直接等比缩放即可
+        if (width == height) {
+            return Bitmap.createScaledBitmap(source, targetSize, targetSize, true)
+        }
+
+        val scaled = Bitmap.createScaledBitmap(source, scaledWidth, scaledHeight, true)
+        val x = (scaledWidth - targetSize) / 2
+        val y = (scaledHeight - targetSize) / 2
+        val cropped = Bitmap.createBitmap(scaled, x.coerceAtLeast(0), y.coerceAtLeast(0), targetSize, targetSize)
+        scaled.recycle()
+        return cropped
     }
 
     /**

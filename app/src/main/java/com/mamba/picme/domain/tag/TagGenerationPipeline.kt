@@ -3,9 +3,11 @@ package com.mamba.picme.domain.tag
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.graphics.RectF
 import android.net.Uri
 import android.util.Log
+import androidx.exifinterface.media.ExifInterface
 import com.mamba.picme.agent.core.inference.local.llm.LocalLlmEngine
 import com.mamba.picme.beauty.api.facedetect.FaceDetector
 import com.mamba.picme.domain.model.AppLanguage
@@ -595,10 +597,10 @@ class TagGenerationPipeline(
     }
 
     /**
-     * 从 Content URI 加载 Bitmap，缩放到指定最长边。
+     * 从 Content URI 加载 Bitmap，缩放到指定最长边，并校正 EXIF 方向。
      *
-     * inSampleSize 会被 BitmapFactory 向下取整到 2 的幂次，因此实际尺寸可能略大于 maxSize，
-     * 后续 MobileClipEncoder 内部会再缩放到 256x256，不影响最终 embedding。
+     * inSampleSize 会被 BitmapFactory 向下取整到 2 的幂次，因此实际尺寸可能略大于 maxSize。
+     * 注意：返回的 Bitmap 需要调用方负责回收。
      */
     private fun loadBitmap(uri: String, maxSize: Int): Bitmap? {
         return try {
@@ -617,17 +619,48 @@ class TagGenerationPipeline(
             // inSampleSize 必须是 2 的幂次
             val sampleSize = Integer.highestOneBit(scale).coerceAtLeast(1)
 
-            BitmapFactory.Options().apply {
+            val decoded = BitmapFactory.Options().apply {
                 inSampleSize = sampleSize
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }.let { decodeOptions ->
                 context.contentResolver.openInputStream(contentUri)?.use { stream ->
                     BitmapFactory.decodeStream(stream, null, decodeOptions)
                 }
-            }
+            } ?: return null
+
+            // 校正 EXIF 方向，避免竖拍/旋转照片编码错误
+            applyExifRotation(contentUri, decoded)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to load bitmap from $uri: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * 根据 EXIF 方向标签旋转 Bitmap。
+     *
+     * @return 旋转后的新 Bitmap；无需旋转时返回原 Bitmap
+     */
+    private fun applyExifRotation(uri: Uri, bitmap: Bitmap): Bitmap {
+        val rotationDegrees = try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                ExifInterface(stream).rotationDegrees
+            } ?: 0
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read EXIF orientation: ${e.message}")
+            0
+        }
+
+        if (rotationDegrees == 0) return bitmap
+
+        return try {
+            val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true).also {
+                bitmap.recycle()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to rotate bitmap: ${e.message}")
+            bitmap
         }
     }
 }

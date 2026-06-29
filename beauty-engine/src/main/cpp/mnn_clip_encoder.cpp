@@ -238,6 +238,22 @@ std::vector<float> MobileClipEncoder::encodeText(const int64_t *tokenIds, int to
     MNN::Tensor::DimensionType inputDimType = textInputTensor_->getDimensionType();
     MNN::Tensor tmpInput(textInputTensor_, inputDimType);
 
+    // 校验 MNN text 输入张量类型：必须为 int32
+    auto inputType = textInputTensor_->getType();
+    LOGD("Text input: dims=%d, elementSize=%d, type=%d, bits=%d",
+         textInputTensor_->dimensions(),
+         textInputTensor_->elementSize(),
+         (int)inputType.code,
+         (int)inputType.bits);
+    for (int i = 0; i < textInputTensor_->dimensions(); i++) {
+        LOGD("Text input dim[%d]=%d", i, textInputTensor_->length(i));
+    }
+    if (inputType.code != halide_type_int || inputType.bits != 32) {
+        LOGE("Text input tensor must be int32, got type=%d bits=%d",
+             (int)inputType.code, (int)inputType.bits);
+        return {};
+    }
+
     // MNN 模型输入类型为 int32，需将 int64 token IDs 转换为 int32
     int32_t *inputData = tmpInput.host<int32_t>();
     int inputSize = tmpInput.elementSize();
@@ -255,15 +271,6 @@ std::vector<float> MobileClipEncoder::encodeText(const int64_t *tokenIds, int to
 
     // 复制到 session 输入张量
     textInputTensor_->copyFromHostTensor(&tmpInput);
-
-    // 调试：打印输入张量信息
-    LOGD("Text input: dims=%d, elementSize=%d, type=%d",
-         textInputTensor_->dimensions(),
-         textInputTensor_->elementSize(),
-         (int)textInputTensor_->getType().code);
-    for (int i = 0; i < textInputTensor_->dimensions(); i++) {
-        LOGD("Text input dim[%d]=%d", i, textInputTensor_->length(i));
-    }
 
     // 运行推理
     auto errorCode = textInterpreter_->runSession(textSession_);
