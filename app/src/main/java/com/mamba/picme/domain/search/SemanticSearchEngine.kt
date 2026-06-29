@@ -109,32 +109,41 @@ class SemanticSearchEngine(
 
         if (query.isBlank()) return emptyList()
 
-        // 1. 中文查询翻译（如果含中文）
-        val translatedQuery = translator.translateForClip(query)
-
-        // 2. 文本编码
-        val textEmbedding = encodeTextQuery(translatedQuery) ?: run {
-            Log.w(TAG, "Failed to encode text query: $translatedQuery")
+        // 1. 中文查询翻译 + 同义扩展（如 "小孩" -> ["child", "kid", "children", ...]）
+        val queryCandidates = translator.expandForClip(query)
+        if (queryCandidates.isEmpty()) {
+            Log.w(TAG, "No query candidates for: $query")
             return emptyList()
         }
 
-        // 2. 获取候选集
+        // 2. 对每个候选编码为 text embedding
+        val textEmbeddings = queryCandidates.mapNotNull { candidate ->
+            encodeTextQuery(candidate)?.also {
+                Log.d(TAG, "Encoded query candidate: '$candidate'")
+            }
+        }
+        if (textEmbeddings.isEmpty()) {
+            Log.w(TAG, "Failed to encode any text query candidates: $queryCandidates")
+            return emptyList()
+        }
+
+        // 3. 获取候选集
         val candidates = getCandidates(filter)
         if (candidates.isEmpty()) {
             Log.d(TAG, "No candidates found for semantic search")
             return emptyList()
         }
 
-        // 3. 计算余弦相似度并排序
+        // 4. 计算余弦相似度：同一图片取多个候选中的最大相似度
         val scoredResults = candidates
             .mapNotNull { entity ->
                 val imageEmbedding = base64ToFloatArray(entity.semanticEmbedding) ?: return@mapNotNull null
-                val similarity = engine.cosineSimilarity(textEmbedding, imageEmbedding)
-                if (similarity.isNaN()) {
+                val maxSimilarity = textEmbeddings.maxOf { engine.cosineSimilarity(it, imageEmbedding) }
+                if (maxSimilarity.isNaN()) {
                     Log.w(TAG, "NaN similarity for mediaId=${entity.id}")
                     return@mapNotNull null
                 }
-                SemanticScoredMedia(entity.toDomain(), similarity)
+                SemanticScoredMedia(entity.toDomain(), maxSimilarity)
             }
             .sortedByDescending { it.score }
             .take(topK)
@@ -142,9 +151,9 @@ class SemanticSearchEngine(
         // 日志：展示召回结果详情
         if (scoredResults.isNotEmpty()) {
             val topResults = scoredResults.take(3).joinToString { "${it.media.fileName}=${String.format("%.3f", it.score)}" }
-            Log.i(TAG, "Semantic recall: query='$query' -> '$translatedQuery', candidates=${candidates.size}, returned=${scoredResults.size}, top3=[$topResults]")
+            Log.i(TAG, "Semantic recall: query='$query' -> candidates=${queryCandidates}, embeddings=${textEmbeddings.size}, imageCandidates=${candidates.size}, returned=${scoredResults.size}, top3=[$topResults]")
         } else {
-            Log.w(TAG, "Semantic recall empty: query='$query' -> '$translatedQuery', candidates=${candidates.size}, no match above threshold")
+            Log.w(TAG, "Semantic recall empty: query='$query' -> candidates=${queryCandidates}, imageCandidates=${candidates.size}, no match")
         }
 
         return scoredResults

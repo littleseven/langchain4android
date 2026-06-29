@@ -80,7 +80,9 @@ class TagGenerationService : Service() {
         const val ACTION_SCAN_PASS_2 = "com.mamba.picme.tag.SCAN_PASS_2"
         const val ACTION_SCAN_PASS_3 = "com.mamba.picme.tag.SCAN_PASS_3"
         const val ACTION_SCAN_PASS_3_FULL = "com.mamba.picme.tag.SCAN_PASS_3_FULL"
+        /** 单独执行 MobileCLIP 语义编码（增量）。常规扫描已将该阶段内联合并到 Pass 1。 */
         const val ACTION_SCAN_PASS_4 = "com.mamba.picme.tag.SCAN_PASS_4"
+        /** 单独全量重新生成 MobileCLIP 语义编码。常规扫描已将该阶段内联合并到 Pass 1。 */
         const val ACTION_SCAN_PASS_4_FULL = "com.mamba.picme.tag.SCAN_PASS_4_FULL"
         const val ACTION_REGENERATE_CATEGORIES = "com.mamba.picme.tag.REGENERATE_CATEGORIES"
         const val ACTION_PAUSE = "com.mamba.picme.tag.PAUSE"

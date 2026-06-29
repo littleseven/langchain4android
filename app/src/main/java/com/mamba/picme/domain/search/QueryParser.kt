@@ -229,12 +229,14 @@ object QueryParser {
     }
 
     /**
-     * 判断是否是"人物"相关搜索
+     * 判断是否是"人物"相关搜索（含儿童/婴儿等同义概念）
      */
     fun isPeopleSearch(query: String): Boolean {
         val peopleKeywords = listOf(
             "人", "人物", "人脸", "合照", "合影", "people", "person",
-            "face", "portrait", "selfie", "自拍", "头像"
+            "face", "portrait", "selfie", "自拍", "头像",
+            "小孩", "儿童", "婴儿", "宝宝", "孩子",
+            "child", "children", "kid", "kids", "baby", "infant", "toddler"
         )
         return peopleKeywords.any { query.contains(it, ignoreCase = true) }
     }

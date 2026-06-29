@@ -491,4 +491,41 @@
     <string name="hold_to_speak">按住說話</string>
     <string name="release_to_stop">鬆開結束</string>
 
+    <!-- Search Test -->
+    <string name="search_test_title">搜索召回測試</string>
+    <string name="search_test_query_hint">輸入關鍵詞，例如：美女</string>
+    <string name="search_test_start">開始搜索</string>
+    <string name="search_test_start_short">搜索</string>
+    <string name="search_test_enable_semantic">啟用語義搜索</string>
+    <string name="search_test_idle_hint">輸入關鍵詞並點擊搜索，觀察召回鏈路。</string>
+    <string name="search_test_searching">搜索中…</string>
+    <string name="search_test_parsed_filter">解析結果</string>
+    <string name="search_test_keywords">關鍵詞</string>
+    <string name="search_test_ocr_keywords">OCR 關鍵詞</string>
+    <string name="search_test_location_keywords">地點</string>
+    <string name="search_test_time_range">時間範圍</string>
+    <string name="search_test_has_faces">含人臉</string>
+    <string name="search_test_need_llm">需要 LLM</string>
+    <string name="search_test_none">無</string>
+    <string name="search_test_unlimited">不限</string>
+    <string name="search_test_metrics">關鍵指標</string>
+    <string name="search_test_total_time">總耗時</string>
+    <string name="search_test_parse_time">解析耗時</string>
+    <string name="search_test_sql_time">SQL 召回耗時</string>
+    <string name="search_test_semantic_time">語義召回耗時</string>
+    <string name="search_test_merge_time">融合排序耗時</string>
+    <string name="search_test_semantic_ready">語義引擎就緒</string>
+    <string name="search_test_final_count">最終結果數</string>
+    <string name="search_test_recall_breakdown">召回維度</string>
+    <string name="search_test_merged_results">融合排序結果</string>
+    <string name="search_test_semantic_results">語義召回結果 (%1$d)</string>
+    <string name="search_test_more_results">還有 %1$d 條結果未顯示</string>
+    <string name="search_test_logs">日誌</string>
+    <string name="search_test_entry_title">搜索測試頁</string>
+    <string name="search_test_entry_subtitle">搜索召回全鏈路觀測</string>
+    <string name="enter">進入</string>
+    <string name="yes">是</string>
+    <string name="no">否</string>
+    <string name="clear">清除</string>
+    <string name="remove">移除</string>
 </resources>

@@ -516,4 +516,42 @@
     <string name="auto_tag_scanning_progress">Scanning: %1$d/%2$d</string>
     <string name="auto_tag_not_scanning">Not scanning</string>
     <string name="auto_tag_cancelled">Cancelled</string>
+
+    <!-- Search Test -->
+    <string name="search_test_title">Search Recall Test</string>
+    <string name="search_test_query_hint">Enter keyword, e.g. beauty</string>
+    <string name="search_test_start">Start Search</string>
+    <string name="search_test_start_short">Search</string>
+    <string name="search_test_enable_semantic">Enable semantic search</string>
+    <string name="search_test_idle_hint">Enter a keyword and tap search to observe the recall pipeline.</string>
+    <string name="search_test_searching">Searching…</string>
+    <string name="search_test_parsed_filter">Parsed Filter</string>
+    <string name="search_test_keywords">Keywords</string>
+    <string name="search_test_ocr_keywords">OCR Keywords</string>
+    <string name="search_test_location_keywords">Location</string>
+    <string name="search_test_time_range">Time Range</string>
+    <string name="search_test_has_faces">Has Faces</string>
+    <string name="search_test_need_llm">Needs LLM</string>
+    <string name="search_test_none">None</string>
+    <string name="search_test_unlimited">Unlimited</string>
+    <string name="search_test_metrics">Metrics</string>
+    <string name="search_test_total_time">Total Time</string>
+    <string name="search_test_parse_time">Parse Time</string>
+    <string name="search_test_sql_time">SQL Recall Time</string>
+    <string name="search_test_semantic_time">Semantic Recall Time</string>
+    <string name="search_test_merge_time">Merge Time</string>
+    <string name="search_test_semantic_ready">Semantic Engine Ready</string>
+    <string name="search_test_final_count">Final Results</string>
+    <string name="search_test_recall_breakdown">Recall Breakdown</string>
+    <string name="search_test_merged_results">Merged Results</string>
+    <string name="search_test_semantic_results">Semantic Results (%1$d)</string>
+    <string name="search_test_more_results">%1$d more results not shown</string>
+    <string name="search_test_logs">Logs</string>
+    <string name="search_test_entry_title">Search Test</string>
+    <string name="search_test_entry_subtitle">Full recall pipeline observation</string>
+    <string name="enter">Enter</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="clear">Clear</string>
+    <string name="remove">Remove</string>
 </resources>

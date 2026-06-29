@@ -33,7 +33,8 @@ import kotlinx.coroutines.launch
 /**
  * TAG 生成精细控制子页面
  *
- * 显示 4-Pass 混合管道的各阶段进度和数据库统计。
+ * 显示 3-Pass 混合管道的各阶段进度和数据库统计。
+ * MobileCLIP 语义编码已内联合并到 Pass 1，不再作为独立 Pass 4 显示。
  * 所有操作通过 TagGenerationService → TagScanOrchestrator 统一管理。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -173,9 +174,9 @@ fun TagGenerationControlScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Pass 1: 人脸检测 + MobileCLIP 语义编码", style = MaterialTheme.typography.bodyMedium)
+                            Text("Pass 1: 人脸检测 + MobileCLIP 语义编码（内联）", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "RetinaFace + MobileCLIP-S0 → $withFace / $totalMedia 张",
+                                "RetinaFace + MobileCLIP-S0 → $withFace / $totalMedia 张 · 有语义 $withSemantic 张",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -391,7 +392,7 @@ fun TagGenerationControlScreen(
 
                         Spacer(Modifier.height(8.dp))
 
-                        // ── 语义编码重新生成（清空重编码） ──────────
+                        // ── MobileCLIP 语义编码单独重新生成（清空重编码） ──────────
                         Button(
                             onClick = {
                                 refreshStats()
@@ -404,7 +405,7 @@ fun TagGenerationControlScreen(
                         ) {
                             Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("语义编码重新生成")
+                            Text("MobileCLIP 语义编码重新生成")
                         }
 
                         Spacer(Modifier.height(8.dp))
@@ -674,7 +675,7 @@ private fun passDisplayName(pass: TagScanPass?): String = when (pass) {
     TagScanPass.FACE_DETECTION -> "Pass 1: 人脸检测 + MobileCLIP"
     TagScanPass.DBSCAN -> "Pass 2: DBSCAN 聚类"
     TagScanPass.QWEN_TAGGING -> "Pass 3: Qwen 标签"
-    TagScanPass.MOBILE_CLIP_ENCODING -> "语义编码"
+    TagScanPass.MOBILE_CLIP_ENCODING -> "MobileCLIP 语义编码（单独）"
     null -> "准备中"
 }
 

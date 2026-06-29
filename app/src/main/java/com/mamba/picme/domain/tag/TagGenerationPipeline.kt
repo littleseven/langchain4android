@@ -262,14 +262,18 @@ class TagGenerationPipeline(
     }
 
     // ═══════════════════════════════════════════════════
-    //  [Pass 4] MobileCLIP 语义编码（已提前至 Pass 1 后执行）
+    //  MobileCLIP 语义编码（已内联合并到 Pass 1，保留方法用于单独重编码）
     // ═══════════════════════════════════════════════════
 
     /**
-     * [Pass 4] MobileCLIP 语义编码
+     * MobileCLIP 语义编码
      *
      * 使用 MobileCLIP-S0 生成 512 维 L2 归一化图像 embedding，
      * 存储为 Base64 字符串供语义搜索使用。
+     *
+     * 说明：常规扫描已将该阶段内联合并到 Pass 1。此方法保留用于：
+     * - Pass 1 内联调用
+     * - 单独对某张或某批媒体重新生成语义编码
      *
      * 已优化：支持复用已加载的 Bitmap，避免重复解码。
      *
@@ -284,33 +288,40 @@ class TagGenerationPipeline(
         reuseBitmap: Bitmap? = null
     ): String? {
         val engine = mobileClipEngine ?: run {
-            Log.w(TAG, "[Pass 4] MobileClipEngine not available")
+            Log.w(TAG, "[MobileCLIP] MobileClipEngine not available")
             return null
         }
 
         if (!engine.isInitialized) {
-            Log.w(TAG, "[Pass 4] MobileClipEngine not initialized, attempting init")
+            Log.w(TAG, "[MobileCLIP] MobileClipEngine not initialized, attempting init")
             if (!engine.initialize(useGpu = false)) {
-                Log.w(TAG, "[Pass 4] Failed to initialize MobileClipEngine")
+                Log.w(TAG, "[MobileCLIP] Failed to initialize MobileClipEngine")
                 return null
             }
         }
 
         val bitmap = reuseBitmap ?: loadBitmap(uri, MAX_VISION_SIZE)
         if (bitmap == null) {
-            Log.w(TAG, "[Pass 4] Failed to load bitmap for mediaId=$mediaId")
+            Log.w(TAG, "[MobileCLIP] Failed to load bitmap for mediaId=$mediaId")
             return null
         }
 
         return try {
             val embedding = engine.encodeImage(bitmap)
             if (embedding == null) {
-                Log.w(TAG, "[Pass 4] encodeImage returned null for mediaId=$mediaId")
+                Log.w(TAG, "[MobileCLIP] encodeImage returned null for mediaId=$mediaId")
                 return null
             }
+
+            // 二次校验：确保入库前 embedding 是有效且已归一化的
+            if (!isValidEmbedding(embedding)) {
+                Log.w(TAG, "[MobileCLIP] Invalid embedding rejected for mediaId=$mediaId")
+                return null
+            }
+
             // 编码为 Base64 字符串存储
             val base64 = floatArrayToBase64(embedding)
-            Log.d(TAG, "[Pass 4] Encoded embedding for mediaId=$mediaId, dim=${embedding.size}, base64_len=${base64.length}")
+            Log.d(TAG, "[MobileCLIP] Encoded embedding for mediaId=$mediaId, dim=${embedding.size}, base64_len=${base64.length}")
             base64
         } finally {
             // 仅当 bitmap 是自己加载的才回收，外部传入的不负责回收
@@ -318,6 +329,22 @@ class TagGenerationPipeline(
                 bitmap.recycle()
             }
         }
+    }
+
+    /**
+     * 校验 embedding 是否可用于入库。
+     *
+     * 注意：MobileClipEngine 已在返回前做强制 L2 归一化，这里做最终守门检查。
+     */
+    private fun isValidEmbedding(embedding: FloatArray): Boolean {
+        if (embedding.size != 512) return false
+        var norm = 0f
+        for (v in embedding) {
+            if (v.isNaN() || v.isInfinite()) return false
+            norm += v * v
+        }
+        // L2 归一化后 norm 应接近 1.0；允许小误差，拒绝零向量
+        return norm > 0.8f
     }
 
     /**
@@ -568,7 +595,10 @@ class TagGenerationPipeline(
     }
 
     /**
-     * 从 Content URI 加载 Bitmap，缩放到指定最长边
+     * 从 Content URI 加载 Bitmap，缩放到指定最长边。
+     *
+     * inSampleSize 会被 BitmapFactory 向下取整到 2 的幂次，因此实际尺寸可能略大于 maxSize，
+     * 后续 MobileClipEncoder 内部会再缩放到 256x256，不影响最终 embedding。
      */
     private fun loadBitmap(uri: String, maxSize: Int): Bitmap? {
         return try {
@@ -576,17 +606,24 @@ class TagGenerationPipeline(
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
             }
-            BitmapFactory.decodeStream(context.contentResolver.openInputStream(contentUri), null, options)
+            context.contentResolver.openInputStream(contentUri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, options)
+            }
 
             val scale = if (maxOf(options.outWidth, options.outHeight) > maxSize) {
                 maxOf(options.outWidth, options.outHeight) / maxSize
             } else 1
 
+            // inSampleSize 必须是 2 的幂次
+            val sampleSize = Integer.highestOneBit(scale).coerceAtLeast(1)
+
             BitmapFactory.Options().apply {
-                inSampleSize = scale
+                inSampleSize = sampleSize
                 inPreferredConfig = Bitmap.Config.ARGB_8888
-            }.let {
-                BitmapFactory.decodeStream(context.contentResolver.openInputStream(contentUri), null, it)
+            }.let { decodeOptions ->
+                context.contentResolver.openInputStream(contentUri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream, null, decodeOptions)
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to load bitmap from $uri: ${e.message}")

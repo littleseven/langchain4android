@@ -12,8 +12,8 @@ import java.io.File
  *
  * 使用 MNN 引擎加载 MobileCLIP-S0 的 vision_model 和 text_model，
  * 生成 512 维 L2 归一化 embedding，用于：
- * - Pass 4: 图像语义编码（替代/补充 Qwen 标签）
- * - 未来: 文本→图像语义搜索
+ * - MobileCLIP 图像语义编码（已内联合并到 TAG 扫描 Pass 1）
+ * - 文本→图像语义搜索
  *
  * 模型文件从 ModelScope 远程下载到 llm_models/mobileclip-mnn/ 目录。
  *
@@ -108,7 +108,8 @@ class MobileClipEngine(
             return null
         }
 
-        return enc.encodeImage(bitmap)
+        val raw = enc.encodeImage(bitmap) ?: return null
+        return validateAndNormalize(raw, "encodeImage")
     }
 
     /**
@@ -127,7 +128,43 @@ class MobileClipEngine(
             return null
         }
 
-        return enc.encodeText(tokenIds)
+        val raw = enc.encodeText(tokenIds) ?: return null
+        return validateAndNormalize(raw, "encodeText")
+    }
+
+    /**
+     * 校验并强制 L2 归一化 embedding。
+     *
+     * 防止模型输出异常（零向量、NaN、维度错误、非归一化）污染数据库。
+     */
+    private fun validateAndNormalize(embedding: FloatArray, source: String): FloatArray? {
+        if (embedding.size != EMBEDDING_DIM) {
+            Log.w(TAG, "$source: invalid embedding dimension ${embedding.size}, expected $EMBEDDING_DIM")
+            return null
+        }
+
+        var norm = 0f
+        for (v in embedding) {
+            if (v.isNaN() || v.isInfinite()) {
+                Log.w(TAG, "$source: embedding contains NaN/Infinite value")
+                return null
+            }
+            norm += v * v
+        }
+
+        if (norm <= 0f) {
+            Log.w(TAG, "$source: zero vector embedding rejected")
+            return null
+        }
+
+        norm = kotlin.math.sqrt(norm)
+        if (norm > 0f) {
+            for (i in embedding.indices) {
+                embedding[i] /= norm
+            }
+        }
+
+        return embedding
     }
 
     /**

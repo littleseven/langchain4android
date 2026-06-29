@@ -12,6 +12,9 @@ import androidx.room.PrimaryKey
  * - 按 TAG 类别精细控制
  * - 暂停/恢复/取消生命周期
  * - 失败重试与避重
+ *
+ * 说明：MobileCLIP 语义编码已内联合并到 Pass 1（FACE_DETECTION）。
+ * [TagScanPass.MOBILE_CLIP_ENCODING] 保留用于历史任务兼容以及单独重编码场景。
  */
 @Entity(
     tableName = "tag_scan_tasks",
@@ -63,9 +66,16 @@ data class TagScanTaskEntity(
 )
 
 enum class TagScanPass {
+    /** Pass 1: 人脸检测 + 人脸 Embedding + MobileCLIP 语义编码（语义编码已内联合并） */
     FACE_DETECTION,
+    /** Pass 2: 全局 DBSCAN 聚类 */
     DBSCAN,
+    /** Pass 3: Qwen 图像理解标签生成 */
     QWEN_TAGGING,
+    /**
+     * MobileCLIP 语义编码（保留以兼容历史任务/单独重编码场景）。
+     * 常规扫描已将该阶段内联合并到 [FACE_DETECTION]。
+     */
     MOBILE_CLIP_ENCODING
 }
 

@@ -5,6 +5,7 @@ import android.util.Log
 import com.mamba.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
 import java.io.File
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * MobileCLIP 编码器（MNN 引擎）
@@ -136,6 +137,7 @@ class MobileClipEncoder private constructor(
 
             // ARGB -> RGB DirectByteBuffer
             val rgbBuffer = ByteBuffer.allocateDirect(pixelCount * 3)
+                .order(ByteOrder.nativeOrder())
             for (i in 0 until pixelCount) {
                 val pixel = pixels[i]
                 rgbBuffer.put(i * 3, (pixel shr 16 and 0xFF).toByte())     // R

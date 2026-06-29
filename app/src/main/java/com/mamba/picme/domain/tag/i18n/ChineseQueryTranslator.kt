@@ -36,6 +36,27 @@ class ChineseQueryTranslator(
             "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去",
             "你", "会", "着", "没有", "看", "好", "自己", "这", "那"
         )
+
+        /**
+         * MobileCLIP 语义搜索查询扩展表。
+         * 关键：同一个中文概念可能对应多个英文表达，取最大相似度可提升召回。
+         */
+        private val CLIP_QUERY_EXPANSIONS: Map<String, List<String>> = mapOf(
+            "小孩" to listOf("child", "kid", "children", "young child"),
+            "儿童" to listOf("child", "children", "young child"),
+            "婴儿" to listOf("baby", "infant", "newborn"),
+            "宝宝" to listOf("baby", "toddler", "infant"),
+            "孩子" to listOf("child", "kid", "children"),
+            "男孩" to listOf("boy", "little boy", "young boy"),
+            "女孩" to listOf("girl", "little girl", "young girl"),
+            "猫" to listOf("cat", "kitten"),
+            "狗" to listOf("dog", "puppy"),
+            "花" to listOf("flower", "blossom"),
+            "海边" to listOf("beach", "seaside", "shore"),
+            "日落" to listOf("sunset", "dusk"),
+            "山" to listOf("mountain", "hill"),
+            "美食" to listOf("food", "cuisine", "delicious food")
+        )
     }
 
     /** 翻译引擎（延迟初始化） */
@@ -88,6 +109,31 @@ class ChineseQueryTranslator(
      */
     fun translateBatch(queries: List<String>): List<String> =
         queries.map { translateForClip(it) }
+
+    /**
+     * 将用户查询扩展为多个 MobileCLIP 英文候选，语义搜索时取最大相似度。
+     *
+     * @param query 用户原始查询
+     * @return 候选英文查询列表（去重，至少包含翻译结果）
+     */
+    fun expandForClip(query: String): List<String> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        // 纯英文：直接返回原查询 + 简单同义扩展（可后续补充）
+        if (!containsChinese(trimmed)) {
+            return listOf(trimmed)
+        }
+
+        val translated = translateForClip(trimmed)
+        val expansions = CLIP_QUERY_EXPANSIONS[trimmed]
+
+        return if (expansions != null) {
+            (listOf(translated) + expansions).distinct()
+        } else {
+            listOf(translated)
+        }
+    }
 
     /**
      * 检查文本是否包含中文字符

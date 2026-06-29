@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.mamba.picme.BuildConfig
 import com.mamba.picme.R
 import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
 import com.mamba.picme.agent.core.model.config.AiAgentMode
@@ -527,38 +528,40 @@ private fun SettingsContent(
                 }
             }
 
-            // ── 4. 相册调试功能 ─────────────────────────────────────
-            SettingsSection(
-                title = "相册调试功能",
-                description = "测试工具与后端模式切换"
-            ) {
-                SettingsClickableRow(
-                    title = "图片下载页",
-                    subtitle = "测试数据生成与图片下载",
-                    valueText = "进入",
-                    onClick = onNavigateToDebug
-                )
+            // ── 4. 相册调试功能（仅 Debug 构建）────────────────────────
+            if (BuildConfig.DEBUG) {
+                SettingsSection(
+                    title = "相册调试功能",
+                    description = "测试工具与后端模式切换"
+                ) {
+                    SettingsClickableRow(
+                        title = "图片下载页",
+                        subtitle = "测试数据生成与图片下载",
+                        valueText = "进入",
+                        onClick = onNavigateToDebug
+                    )
 
-                SettingsClickableRow(
-                    title = "搜索测试页",
-                    subtitle = "TAG语义搜索功能测试",
-                    valueText = "进入",
-                    onClick = onNavigateToSearchTest
-                )
+                    SettingsClickableRow(
+                        title = stringResource(R.string.search_test_entry_title),
+                        subtitle = stringResource(R.string.search_test_entry_subtitle),
+                        valueText = stringResource(R.string.enter),
+                        onClick = onNavigateToSearchTest
+                    )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                OpenClBackendSelection(
-                    useOpencl = tagGenerationUseOpencl,
-                    onToggle = onTagGenerationUseOpenclChange,
-                    title = stringResource(R.string.tag_gen_use_opencl_title)
-                )
-                Text(
-                    text = stringResource(R.string.tag_gen_use_opencl_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                )
+                    OpenClBackendSelection(
+                        useOpencl = tagGenerationUseOpencl,
+                        onToggle = onTagGenerationUseOpenclChange,
+                        title = stringResource(R.string.tag_gen_use_opencl_title)
+                    )
+                    Text(
+                        text = stringResource(R.string.tag_gen_use_opencl_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+                }
             }
 
             // ── 5. 美颜引擎 ─────────────────────────────────────

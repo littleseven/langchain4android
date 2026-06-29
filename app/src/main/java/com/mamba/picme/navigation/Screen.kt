@@ -7,6 +7,7 @@ sealed class Screen(val route: String) {
     data object TagControl : Screen("tag_control")
     data object Settings : Screen("settings")
     data object Debug : Screen("debug")
+    data object SearchTest : Screen("search_test")
     data object SentencePieceTest : Screen("sentencepiece_test")
     data object ModelCenter : Screen("model_center/{categoryTag}") {
         fun createRoute(categoryTag: String): String {

@@ -117,9 +117,16 @@ data class FaceTagInfo(
  * 管道处理阶段
  */
 enum class PipelineStage {
+    /** Pass 1: 人脸 ROI + 人脸 Embedding + MobileCLIP 语义编码（已内联合并） */
     FACE_ROI,
+    /** Pass 2: 全局 DBSCAN 聚类 */
     FACE_CLUSTER,
+    /** Pass 3: Qwen 图像理解标签生成 */
     QWEN_TAGGING,
+    /**
+     * MobileCLIP 语义编码（保留枚举值以兼容历史任务/单独重编码场景）。
+     * 注意：常规扫描已将该阶段内联到 [FACE_ROI]。
+     */
     MOBILE_CLIP,
     COMPLETE
 }
@@ -128,13 +135,16 @@ enum class PipelineStage {
  * 管道处理阶段（3-Pass 混合模型细化阶段名）
  */
 enum class PassStage {
-    /** Pass 1: 人脸检测 + Embedding 提取 */
+    /** Pass 1: 人脸检测 + 人脸 Embedding + MobileCLIP 语义编码（已内联合并） */
     FACE_DETECTION,
     /** Pass 2: 全局 DBSCAN 聚类 */
     DBSCAN_CLUSTERING,
     /** Pass 3: Qwen 图像理解标签生成 */
     QWEN_TAGGING,
-    /** Pass 4: MobileCLIP 语义编码 */
+    /**
+     * MobileCLIP 语义编码（保留枚举值以兼容历史任务/单独重编码场景）。
+     * 注意：常规扫描已将该阶段内联到 [FACE_DETECTION]。
+     */
     MOBILE_CLIP_ENCODING,
     COMPLETE
 }

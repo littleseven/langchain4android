@@ -52,6 +52,9 @@ class MobileClipTokenizer(context: Context) {
     /** BPE 合并规则列表（按优先级排序） */
     private val merges: MutableList<Pair<String, String>> = mutableListOf()
 
+    /** BPE 合并规则 -> 优先级（rank 越小越优先） */
+    private val mergeRanks: MutableMap<Pair<String, String>, Int> = mutableMapOf()
+
     /** 特殊 token 配置 */
     private var bosTokenId: Long = DEFAULT_BOS_ID
     private var eosTokenId: Long = DEFAULT_EOS_ID
@@ -64,9 +67,9 @@ class MobileClipTokenizer(context: Context) {
     /** 字节到 Unicode 字符的映射（用于 BPE 处理字节序列） */
     private val byteEncoder: Map<Int, String> by lazy { buildByteEncoder() }
 
-    /** 预编译的正则：按空格和标点切分 */
+    /** 预编译的正则：GPT-2 / CLIP 风格，保留前导空格作为 token 的一部分 */
     private val preTokenizePattern: Pattern by lazy {
-        Pattern.compile("""'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]+|[^\s\p{L}\p{N}]+|\p{Z}+""")
+        Pattern.compile("""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
     }
 
     /**
@@ -114,6 +117,10 @@ class MobileClipTokenizer(context: Context) {
                     }
                 }
             }
+
+            // 构建 merge 优先级表
+            mergeRanks.clear()
+            merges.forEachIndexed { index, pair -> mergeRanks[pair] = index }
 
             // 3. 加载特殊 token 配置
             if (json.has("added_tokens")) {
@@ -177,6 +184,10 @@ class MobileClipTokenizer(context: Context) {
                     }
                 }
             }
+
+            // 构建 merge 优先级表
+            mergeRanks.clear()
+            merges.forEachIndexed { index, pair -> mergeRanks[pair] = index }
 
             isLoaded = true
             Log.i(TAG, "Tokenizer loaded from vocab.txt + merges.txt: vocab=${vocab.size}, merges=${merges.size}")
@@ -249,15 +260,15 @@ class MobileClipTokenizer(context: Context) {
     }
 
     /**
-     * 预分词：按空格和标点切分
+     * 预分词：GPT-2 / CLIP 风格，保留带前导空格的 token
      */
     private fun preTokenize(text: String): List<String> {
         val matcher = preTokenizePattern.matcher(text)
         val words = mutableListOf<String>()
         while (matcher.find()) {
             val match = matcher.group()
-            // 跳过纯空格
-            if (!match.matches(Regex("\\p{Z}+"))) {
+            // 过滤纯空白（如行尾空格），保留带内容的 token
+            if (match.isNotBlank()) {
                 words.add(match)
             }
         }
@@ -265,121 +276,83 @@ class MobileClipTokenizer(context: Context) {
     }
 
     /**
-     * 对单个词进行 BPE 编码
+     * 对单个 pretoken 进行 BPE 编码
      */
-    private fun bpeEncode(word: String): List<Long> {
-        // 1. 将词转换为字节序列，然后映射为 Unicode 字符
-        val byteWord = word.encodeToByteArray()
-        var wordTokens = byteWord.map { byte ->
-            byteEncoder[byte.toInt() and 0xFF] ?: ""
-        }.filter { it.isNotEmpty() }
+    private fun bpeEncode(token: String): List<Long> {
+        if (token.isEmpty()) return emptyList()
 
-        if (wordTokens.isEmpty()) return emptyList()
+        // 1. Byte encoder：将字节映射为 GPT-2 / CLIP 风格的 Unicode 字符
+        val encodedToken = token.encodeToByteArray()
+            .map { byteEncoder[it.toInt() and 0xFF] ?: "" }
+            .joinToString("")
 
-        // 2. 迭代应用 BPE 合并规则
-        var currentWord = wordTokens.joinToString("")
-        val tokenIds = mutableListOf<Long>()
+        if (encodedToken.isEmpty()) return emptyList()
 
-        // 简化的 BPE：直接查找 vocab 中最长匹配
-        // 注意：这是简化实现，完整 BPE 需要按 merges 优先级逐步合并
-        val encoded = bpeMerge(currentWord)
+        // 2. 标准 BPE 合并
+        val bpeTokens = bpeMerge(encodedToken)
 
         // 3. 映射为 token IDs
-        for (token in encoded) {
-            val id = vocab[token]
+        val tokenIds = mutableListOf<Long>()
+        for (bpeToken in bpeTokens) {
+            val id = vocab[bpeToken]
             if (id != null) {
                 tokenIds.add(id)
             } else {
-                // 未知 token，尝试子词拆分或使用 <unk>
-                Log.w(TAG, "Unknown token: '$token' in word '$word'")
+                Log.w(TAG, "Unknown BPE token: '$bpeToken' in token '$token'")
             }
         }
-
         return tokenIds
     }
 
     /**
-     * BPE 合并：按 merges 规则逐步合并最频繁的字符对
+     * 标准 BPE 合并：按 merges.txt / tokenizer.json 中的优先级逐步合并字符对。
+     *
+     * 与 OpenAI GPT-2 / CLIP 算法一致：
+     * 1. 每个字符（byte encoder 后的 Unicode 字符）作为一个 token
+     * 2. 每次选择优先级最高（rank 最小）且存在于 mergeRanks 的相邻 pair
+     * 3. 将该 pair 在整词中全部合并为单个 token
+     * 4. 重复直到没有可合并的 pair
      */
-    private fun bpeMerge(word: String): List<String> {
-        if (word.isEmpty()) return emptyList()
+    private fun bpeMerge(token: String): List<String> {
+        if (token.length <= 1) return token.map { it.toString() }
 
-        // 初始：每个字符（或字节映射后的字符）作为一个 token
-        var wordTokens = word.map { it.toString() }.toMutableList()
+        var word = token.map { it.toString() }
 
-        // 迭代应用 merges
-        var changed = true
-        var iterations = 0
-        val maxIterations = wordTokens.size * 2
-
-        while (changed && iterations < maxIterations) {
-            changed = false
-            iterations++
-
-            // 找到第一个可应用的 merge 规则
-            for (i in 0 until wordTokens.size - 1) {
-                val pair = wordTokens[i] to wordTokens[i + 1]
-                val merged = pair.first + pair.second
-
-                // 检查合并后的 token 是否在 vocab 中
-                if (vocab.containsKey(merged)) {
-                    // 应用合并
-                    val newTokens = mutableListOf<String>()
-                    var j = 0
-                    while (j < wordTokens.size) {
-                        if (j < wordTokens.size - 1 &&
-                            wordTokens[j] == pair.first &&
-                            wordTokens[j + 1] == pair.second
-                        ) {
-                            newTokens.add(merged)
-                            j += 2
-                            changed = true
-                        } else {
-                            newTokens.add(wordTokens[j])
-                            j++
-                        }
-                    }
-                    wordTokens = newTokens
-                    break // 一次只应用一个 merge，然后重新扫描
-                }
+        fun getPairs(tokens: List<String>): Set<Pair<String, String>> {
+            val pairs = mutableSetOf<Pair<String, String>>()
+            var prev = tokens[0]
+            for (i in 1 until tokens.size) {
+                pairs.add(prev to tokens[i])
+                prev = tokens[i]
             }
+            return pairs
         }
 
-        // 最后，尝试将连续 token 合并为 vocab 中更长的 token
-        return greedyMerge(wordTokens)
-    }
+        var pairs = getPairs(word)
+        while (pairs.isNotEmpty()) {
+            // 选择优先级最高（rank 最小）的可合并 pair
+            val (first, second) = pairs.minByOrNull { mergeRanks.getOrDefault(it, Int.MAX_VALUE) }
+                ?: break
 
-    /**
-     * 贪婪合并：尽可能合并 vocab 中存在的长 token
-     */
-    private fun greedyMerge(tokens: List<String>): List<String> {
-        if (tokens.isEmpty()) return emptyList()
+            if ((first to second) !in mergeRanks) break
 
-        val result = mutableListOf<String>()
-        var i = 0
-        while (i < tokens.size) {
-            // 尝试从当前位置开始，找到 vocab 中最长的匹配
-            var longestMatch: String? = null
-            var longestLen = 0
-
-            for (len in minOf(10, tokens.size - i) downTo 1) {
-                val candidate = tokens.subList(i, i + len).joinToString("")
-                if (vocab.containsKey(candidate) && len > longestLen) {
-                    longestMatch = candidate
-                    longestLen = len
+            val newWord = mutableListOf<String>()
+            var i = 0
+            while (i < word.size) {
+                if (i < word.size - 1 && word[i] == first && word[i + 1] == second) {
+                    newWord.add(first + second)
+                    i += 2
+                } else {
+                    newWord.add(word[i])
+                    i++
                 }
             }
-
-            if (longestMatch != null) {
-                result.add(longestMatch)
-                i += longestLen
-            } else {
-                result.add(tokens[i])
-                i++
-            }
+            word = newWord
+            if (word.size <= 1) break
+            pairs = getPairs(word)
         }
 
-        return result
+        return word
     }
 
     /**
@@ -394,22 +367,32 @@ class MobileClipTokenizer(context: Context) {
     }
 
     /**
-     * 构建字节到 Unicode 的映射表（GPT-2 / CLIP 风格）
+     * 构建字节到 Unicode 的映射表（标准 GPT-2 / CLIP 实现）
+     *
+     * 参考 OpenAI GPT-2 bytes_to_unicode：
+     * 1. 初始集合：可打印 ASCII + 部分 Latin-1
+     * 2. 剩余 0-255 字节按顺序映射到 256+ 的 Unicode 码点
      */
     private fun buildByteEncoder(): Map<Int, String> {
-        val bytes = mutableListOf<Int>()
-        // 可打印 ASCII + 扩展 Latin-1
-        var i = 0
-        while (i < 256) {
-            bytes.add(i)
-            i++
+        val initialBytes = mutableListOf<Int>()
+        for (b in '!'.code..'~'.code) initialBytes.add(b)
+        for (b in '¡'.code..'¬'.code) initialBytes.add(b)
+        for (b in '®'.code..'ÿ'.code) initialBytes.add(b)
+
+        val bytes = initialBytes.toMutableList()
+        val chars = initialBytes.toMutableList()
+
+        var n = 0
+        for (b in 0 until 256) {
+            if (b !in initialBytes) {
+                bytes.add(b)
+                chars.add(256 + n)
+                n++
+            }
         }
 
-        // 按 Unicode 码点排序
-        val chars = bytes.map { it.toChar() }.sorted()
-
         return bytes.mapIndexed { index, byte ->
-            byte to chars[index].toString()
+            byte to chars[index].toChar().toString()
         }.toMap()
     }
 

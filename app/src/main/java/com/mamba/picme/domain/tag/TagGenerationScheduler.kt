@@ -138,7 +138,7 @@ class TagGenerationScheduler(
         currentJob = scope.launch {
             try {
                 _isScanning.value = true
-                Log.i(TAG, "=== 4-Pass Hybrid Scan started ===")
+                Log.i(TAG, "=== 3-Pass Hybrid Scan started (MobileCLIP inline in Pass 1) ===")
 
                 if (!ensureModelLoaded()) {
                     Log.w(TAG, "Model not loaded, aborting")
@@ -156,10 +156,10 @@ class TagGenerationScheduler(
                 }
 
                 // ═══════════════════════════════════════════════
-                //  Pass 1: 人脸检测 + Embedding 提取 + MobileCLIP 语义编码
+                //  Pass 1: 人脸检测 + 人脸 Embedding + MobileCLIP 语义编码（已内联合并）
                 // ═══════════════════════════════════════════════
                 _progress.value = TagScanProgress(0, total, PipelineStage.FACE_ROI)
-                Log.i(TAG, "=== Pass 1: Face detection + Embedding + MobileCLIP ===")
+                Log.i(TAG, "=== Pass 1: Face detection + Face Embedding + MobileCLIP (inline) ===")
 
                 // 清理旧 embedding 和 persons，确保 Pass 2 结果正确
                 personDao.clearAllEmbeddings()
@@ -202,7 +202,7 @@ class TagGenerationScheduler(
                             )
                         }
 
-                        // 【Pass 4 提前】在同一循环中执行 MobileCLIP 语义编码
+                        // MobileCLIP 语义编码已内联合并到 Pass 1：在同一循环中执行
                         // 不依赖 Pass 1 的 Bitmap（尺寸不同），独立加载 512px Bitmap
                         try {
                             val semanticEmbedding = pipeline.stage4MobileClipEncoding(
@@ -213,7 +213,7 @@ class TagGenerationScheduler(
                                 dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "Pass 4 (inline) failed for media ${entity.id}: ${e.message}")
+                            Log.w(TAG, "MobileCLIP encoding (inline in Pass 1) failed for media ${entity.id}: ${e.message}")
                         }
 
                         pass1Processed++
@@ -288,8 +288,8 @@ class TagGenerationScheduler(
                 }
 
                 _progress.value = TagScanProgress(total, total, PipelineStage.COMPLETE)
-                Log.i(TAG, "=== 4-Pass Hybrid Scan completed: " +
-                    "P1+P4=$pass1Processed/$total, P2=DBSCAN, P3=$pass3Processed/$taggingTotal ===")
+                Log.i(TAG, "=== 3-Pass Hybrid Scan completed: " +
+                    "P1=$pass1Processed/$total (MobileCLIP inline), P2=DBSCAN, P3=$pass3Processed/$taggingTotal ===")
             } finally {
                 _isScanning.value = false
                 unloadLlm()
@@ -370,14 +370,14 @@ class TagGenerationScheduler(
                 val allCount = dao.getTotalCount()
                 val alreadyDone = allCount - total
 
-                // ── Pass 1: 未检测 ROI 的媒体 ──────────────
+                // ── Pass 1: 未检测 ROI 的媒体（含 MobileCLIP 语义编码内联） ──────────────
                 val needRoi = unlabeledMedia.filter { dao.getFaceRoiResult(it.id) == null }
                 var pass1Processed = 0
-                var pass4Processed = 0
+                var mobileClipProcessed = 0
 
                 if (needRoi.isNotEmpty()) {
                     _progress.value = TagScanProgress(alreadyDone, allCount, PipelineStage.FACE_ROI)
-                    Log.i(TAG, "Incremental Pass 1: ${needRoi.size} media need face detection")
+                    Log.i(TAG, "Incremental Pass 1: ${needRoi.size} media need face detection + MobileCLIP")
 
                     for (entity in needRoi) {
                         if (!isActive) break
@@ -406,7 +406,7 @@ class TagGenerationScheduler(
                                 )
                             }
 
-                            // 【Pass 4 提前】同步执行 MobileCLIP 语义编码
+                            // MobileCLIP 语义编码已内联合并到 Pass 1：同步执行
                             try {
                                 val semanticEmbedding = pipeline.stage4MobileClipEncoding(
                                     uri = entity.uri,
@@ -415,9 +415,9 @@ class TagGenerationScheduler(
                                 if (semanticEmbedding != null) {
                                     dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
                                 }
-                                pass4Processed++
+                                mobileClipProcessed++
                             } catch (e: Exception) {
-                                Log.w(TAG, "Incremental Pass 4 (inline) failed for media ${entity.id}: ${e.message}")
+                                Log.w(TAG, "Incremental MobileCLIP encoding (inline in Pass 1) failed for media ${entity.id}: ${e.message}")
                             }
 
                             pass1Processed++
@@ -490,7 +490,7 @@ class TagGenerationScheduler(
 
                 val finalDone = alreadyDone + pass1Processed + pass3Processed
                 _progress.value = TagScanProgress(finalDone, allCount, PipelineStage.COMPLETE)
-                Log.i(TAG, "Incremental scan completed: P1=$pass1Processed, P4=$pass4Processed, P3=$pass3Processed, total=${finalDone}/$allCount")
+                Log.i(TAG, "Incremental scan completed: P1=$pass1Processed (MobileCLIP inline=$mobileClipProcessed), P3=$pass3Processed, total=${finalDone}/$allCount")
             } finally {
                 _isScanning.value = false
                 unloadLlm()
@@ -504,11 +504,12 @@ class TagGenerationScheduler(
     // ═══════════════════════════════════════════════════
 
     /**
-     * [Pass 1 独立执行] 全量人脸检测 + Embedding 提取
+     * [Pass 1 独立执行] 全量人脸检测 + 人脸 Embedding + MobileCLIP 语义编码（内联合并）
      *
-     * - 遍历所有媒体，重新执行人脸检测和 embedding 提取
+     * - 遍历所有媒体，重新执行人脸检测、人脸 embedding 提取和 MobileCLIP 语义编码
      * - faceRoiResult 写入 media_assets 表（供 Pass 3 使用）
-     * - embedding 写入 face_embeddings 表（personId=null，供 Pass 2 聚类）
+     * - 人脸 embedding 写入 face_embeddings 表（personId=null，供 Pass 2 聚类）
+     * - semanticEmbedding 写入 media_assets 表（供语义搜索使用）
      * - 注意：不会清除旧 embedding，多次执行会产生重复数据
      */
     fun scanPass1(
@@ -522,7 +523,7 @@ class TagGenerationScheduler(
         currentJob = scope.launch {
             try {
                 _isScanning.value = true
-                Log.i(TAG, "=== Pass 1 Only: Face detection + Embedding ===")
+                Log.i(TAG, "=== Pass 1 Only: Face detection + Embedding + MobileCLIP (inline) ===")
 
                 // Pass 1 使用 InsightFace + MobileFaceNet，由 Pipeline 内部懒加载
                 val dao = db.mediaDao()
@@ -561,6 +562,19 @@ class TagGenerationScheduler(
                                     embedding = floatArrayToByteArray(embedding)
                                 )
                             )
+                        }
+
+                        // MobileCLIP 语义编码已内联合并到 Pass 1
+                        try {
+                            val semanticEmbedding = pipeline.stage4MobileClipEncoding(
+                                uri = entity.uri,
+                                mediaId = entity.id
+                            )
+                            if (semanticEmbedding != null) {
+                                dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "MobileCLIP encoding (inline in Pass 1) failed for media ${entity.id}: ${e.message}")
                         }
 
                         processed++
@@ -1214,7 +1228,11 @@ class TagGenerationScheduler(
     }
 
     /**
-     * [原子任务] Pass 4：单张媒体的 MobileCLIP 语义编码
+     * [单独重编码任务] 单张媒体的 MobileCLIP 语义编码。
+     *
+     * 注意：常规扫描已将该阶段内联合并到 Pass 1。此方法保留用于：
+     * - 历史 [TagScanPass.MOBILE_CLIP_ENCODING] 任务兼容
+     * - 单独对某张媒体重新生成语义编码
      */
     suspend fun executeMobileClipEncoding(mediaId: Long) {
         val dao = db.mediaDao()

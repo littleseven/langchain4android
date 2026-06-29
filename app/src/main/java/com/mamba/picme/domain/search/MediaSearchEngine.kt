@@ -11,6 +11,7 @@ import com.mamba.picme.domain.repository.UserSettingsRepository
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.domain.tag.i18n.BilingualVocab
 import com.mamba.picme.domain.tag.i18n.TagTranslator
+import java.util.concurrent.TimeUnit
 import org.json.JSONException
 
 /**
@@ -27,6 +28,7 @@ import org.json.JSONException
  * 支持跨语言搜索：通过 [TagTranslator] 把用户输入的英文查询扩展为中文 canonical 词，
  * 从而命中已有中文 TAG，无需全量重生成。
  */
+@Suppress("TooManyFunctions", "LargeClass")
 class MediaSearchEngine(
     private val mediaDao: MediaDao,
     private val tagDao: TagDao? = null,
@@ -60,11 +62,11 @@ class MediaSearchEngine(
 
             // Layer 2.5: 语义召回增强（如果规则匹配结果较少，补充语义结果）
             val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
-                searchSemantic(query, filter, results.size)
+                searchSemantic(query, filter)
             } else emptyList()
 
             // Layer 3: 融合排序
-            val merged = mergeAndRank(results, semanticResults, filter)
+            val merged = mergeAndRank(results, semanticResults)
             return SearchResult(merged, query)
         }
 
@@ -76,10 +78,10 @@ class MediaSearchEngine(
 
                 // 语义召回增强
                 val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
-                    searchSemantic(query, llmFilter, results.size)
+                    searchSemantic(query, llmFilter)
                 } else emptyList()
 
-                val merged = mergeAndRank(results, semanticResults, llmFilter)
+                val merged = mergeAndRank(results, semanticResults)
                 return SearchResult(merged, query)
             }
         }
@@ -98,10 +100,10 @@ class MediaSearchEngine(
 
         // 语义召回（无结构化过滤时全量语义搜索）
         val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
-            searchSemantic(query, null, sqlResults.size)
+            searchSemantic(query, null)
         } else emptyList()
 
-        val merged = mergeAndRank(sqlResults.distinct(), semanticResults, null)
+        val merged = mergeAndRank(sqlResults.distinct(), semanticResults)
         return SearchResult(merged, query)
     }
 
@@ -110,16 +112,15 @@ class MediaSearchEngine(
      *
      * @param query 用户原始查询
      * @param filter 结构化过滤条件（用于缩小候选集）
-     * @param sqlResultCount 已有 SQL 结果数量（用于判断是否补充语义结果）
      * @return 语义搜索结果
      */
     private suspend fun searchSemantic(
         query: String,
-        filter: StructuredFilter?,
-        sqlResultCount: Int
+        filter: StructuredFilter?
     ): List<SemanticScoredMedia> {
         // 如果 SQL 结果已足够多（> 50），语义召回优先级降低
         // 但仍执行语义搜索，用于融合排序中的语义分
+        @Suppress("TooGenericExceptionCaught")
         return try {
             semanticSearchEngine?.searchByText(
                 query = query,
@@ -145,46 +146,46 @@ class MediaSearchEngine(
      */
     private fun mergeAndRank(
         sqlResults: List<MediaAsset>,
-        semanticResults: List<SemanticScoredMedia>,
-        filter: StructuredFilter?
-    ): List<MediaAsset> {
-        // 构建 ID → 综合分数映射
+        semanticResults: List<SemanticScoredMedia>
+    ): List<MediaAsset> = mergeAndRankWithScores(sqlResults, semanticResults).map { it.media }
+
+    /**
+     * 融合排序并返回带分数的结果（搜索测试页观测用）。
+     */
+    private fun mergeAndRankWithScores(
+        sqlResults: List<MediaAsset>,
+        semanticResults: List<SemanticScoredMedia>
+    ): List<ScoredMediaAsset> {
         val scoreMap = mutableMapOf<Long, Float>()
         val mediaMap = mutableMapOf<Long, MediaAsset>()
 
-        // SQL 结果赋予基础分（标签匹配分）
         sqlResults.forEachIndexed { index, media ->
             mediaMap[media.id] = media
-            // 基础分：按排序位置衰减（越靠前分数越高）
             val baseScore = 1.0f - (index.toFloat() / (sqlResults.size + 1))
-            scoreMap[media.id] = baseScore * 0.5f // 标签匹配权重 0.5
+            scoreMap[media.id] = baseScore * SQL_SCORE_WEIGHT
         }
 
-        // 语义结果赋予语义相似度分
         semanticResults.forEach { scored ->
             mediaMap[scored.media.id] = scored.media
             val existingScore = scoreMap.getOrDefault(scored.media.id, 0f)
-            // 语义相似度权重 0.4，与已有分数叠加
-            scoreMap[scored.media.id] = existingScore + scored.score * 0.4f
+            scoreMap[scored.media.id] = existingScore + scored.score * SEMANTIC_SCORE_WEIGHT
         }
 
-        // 时间衰减 boost（新照片加分）
         val now = System.currentTimeMillis()
         scoreMap.keys.forEach { id ->
             val media = mediaMap[id] ?: return@forEach
-            val daysSinceCapture = (now - media.captureDate) / (1000 * 60 * 60 * 24)
+            val daysSinceCapture = (now - media.captureDate) / MS_PER_DAY
             val timeBoost = when {
-                daysSinceCapture < 30 -> 0.3f
-                daysSinceCapture < 365 -> 0.15f
-                else -> 0f
+                daysSinceCapture < TIME_BOOST_RECENT_DAYS -> TIME_BOOST_RECENT
+                daysSinceCapture < TIME_BOOST_YEAR_DAYS -> TIME_BOOST_YEAR
+                else -> NO_TIME_BOOST
             }
-            scoreMap[id] = scoreMap.getOrDefault(id, 0f) + timeBoost * 0.1f
+            scoreMap[id] = scoreMap.getOrDefault(id, 0f) + timeBoost * TIME_SCORE_WEIGHT
         }
 
-        // 按综合分数降序排序
         return scoreMap.entries
             .sortedByDescending { it.value }
-            .mapNotNull { mediaMap[it.key] }
+            .mapNotNull { mediaMap[it.key]?.let { media -> ScoredMediaAsset(media, it.value) } }
     }
 
     /**
@@ -402,13 +403,409 @@ Notes:
         }
     }
 
+    /**
+     * 执行搜索并返回完整诊断信息（用于搜索测试页观测召回链路）。
+     *
+     * 本方法复用现有搜索逻辑，但额外记录每个召回维度的命中数量、耗时与最终融合分数。
+     * 不修改 [search] 行为，避免影响线上 Gallery 搜索链路。
+     */
+    suspend fun searchWithDiagnostics(
+        query: String,
+        enableSemanticSearch: Boolean = true
+    ): SearchDiagnosticsResult {
+        val totalStart = System.currentTimeMillis()
+        val uiLang = userSettingsRepository?.getAppLanguageBlocking() ?: AppLanguage.CHINESE
+
+        // Layer 1: 规则解析
+        val parseStart = System.currentTimeMillis()
+        val filter = QueryParser.parse(query, uiLang)
+        val parseTimeMs = System.currentTimeMillis() - parseStart
+
+        if (filter != null && !filter.needsLlm) {
+            return executeDiagnosticsSearch(
+                query = query,
+                filter = filter,
+                usedLlm = false,
+                llmFilter = null,
+                parseTimeMs = parseTimeMs,
+                totalStart = totalStart,
+                enableSemanticSearch = enableSemanticSearch,
+                uiLang = uiLang
+            )
+        }
+
+        // 规则无法解析 → 需要 LLM（测试页不触发 LLM，直接走兜底模糊搜索）
+        val fallbackStart = System.currentTimeMillis()
+        val queryCandidates = tagTranslator.expandForSearch(query, uiLang)
+        val breakdown = mutableListOf<RecallDimension>()
+        val resultMap = mutableMapOf<Long, Pair<MediaAsset, MutableSet<String>>>()
+
+        for (candidate in queryCandidates) {
+            searchByCandidateWithDiagnostics(candidate, resultMap)
+        }
+        if (QueryParser.isPeopleSearch(query)) {
+            val peopleStart = System.currentTimeMillis()
+            mediaDao.searchByHasFace().forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("has_face")
+                resultMap[entity.id] = media to dims
+            }
+            breakdown.add(RecallDimension("Face", -1, System.currentTimeMillis() - peopleStart))
+        }
+        val fallbackTimeMs = System.currentTimeMillis() - fallbackStart
+
+        val sqlResults = resultMap.values.map { (media, dims) ->
+            DiagnosticMediaItem(media = media, score = 0f, matchDimensions = dims.toList())
+        }.sortedByDescending { it.media.captureDate }
+
+        return buildDiagnosticsResult(
+            query = query,
+            parsedFilter = filter,
+            usedLlm = false,
+            llmFilter = null,
+            parseTimeMs = parseTimeMs,
+            sqlRecallTimeMs = fallbackTimeMs,
+            sqlResults = sqlResults,
+            semanticResults = emptyList(),
+            mergedResults = emptyList(),
+            recallBreakdown = breakdown,
+            totalStart = totalStart,
+            enableSemanticSearch = false,
+            semanticEngineReady = semanticSearchEngine?.isReady ?: false,
+            semanticCandidateCount = 0
+        )
+    }
+
+    @Suppress("LongParameterList")
+    private suspend fun executeDiagnosticsSearch(
+        query: String,
+        filter: StructuredFilter,
+        usedLlm: Boolean,
+        llmFilter: StructuredFilter?,
+        parseTimeMs: Long,
+        totalStart: Long,
+        enableSemanticSearch: Boolean,
+        uiLang: AppLanguage
+    ): SearchDiagnosticsResult {
+        // Layer 1/2 SQL 召回（带诊断）
+        val sqlStart = System.currentTimeMillis()
+        val (sqlResultsRaw, recallBreakdown) = executeFilterWithDiagnostics(filter, uiLang)
+        val sqlResults = sqlResultsRaw.map { (media, dims) ->
+            DiagnosticMediaItem(media = media, score = 0f, matchDimensions = dims.toList())
+        }.sortedByDescending { it.media.captureDate }
+        val sqlRecallTimeMs = System.currentTimeMillis() - sqlStart
+
+        // Layer 2.5 语义召回
+        val semanticStart = System.currentTimeMillis()
+        val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
+            @Suppress("TooGenericExceptionCaught")
+            try {
+                semanticSearchEngine.searchByText(query, filter, topK = 50)
+                    .map { DiagnosticSemanticItem(media = it.media, score = it.score) }
+            } catch (e: Exception) {
+                Logger.w(TAG, "Diagnostic semantic search failed", e)
+                emptyList()
+            }
+        } else emptyList()
+        val semanticRecallTimeMs = System.currentTimeMillis() - semanticStart
+        // SemanticSearchEngine 当前未暴露候选集大小，测试页通过日志观察
+        val semanticCandidateCount = -1
+
+        // Layer 3 融合排序
+        val mergeStart = System.currentTimeMillis()
+        val scoredMerged = mergeAndRankWithScores(
+            sqlResults.map { it.media },
+            semanticResults.map { SemanticScoredMedia(it.media, it.score) }
+        )
+        val mergeTimeMs = System.currentTimeMillis() - mergeStart
+
+        val mergedItems = scoredMerged.map { scored ->
+            val sqlItem = sqlResults.find { it.media.id == scored.media.id }
+            val semanticItem = semanticResults.find { it.media.id == scored.media.id }
+            DiagnosticMediaItem(
+                media = scored.media,
+                score = scored.score,
+                matchDimensions = (sqlItem?.matchDimensions ?: emptyList()) +
+                    if (semanticItem != null) listOf("semantic") else emptyList()
+            )
+        }
+
+        // 语义维度统计：由于 SemanticSearchEngine 不暴露候选集大小，用 -1 占位，UI 显示"见日志"
+        val semanticDimension = RecallDimension(
+            name = "Semantic",
+            count = semanticResults.size,
+            timeMs = semanticRecallTimeMs
+        )
+        val fullBreakdown = recallBreakdown + semanticDimension
+
+        return buildDiagnosticsResult(
+            query = query,
+            parsedFilter = filter,
+            usedLlm = usedLlm,
+            llmFilter = llmFilter,
+            parseTimeMs = parseTimeMs,
+            sqlRecallTimeMs = sqlRecallTimeMs,
+            sqlResults = sqlResults,
+            semanticResults = semanticResults,
+            mergedResults = mergedItems,
+            recallBreakdown = fullBreakdown,
+            totalStart = totalStart,
+            enableSemanticSearch = enableSemanticSearch,
+            semanticEngineReady = semanticSearchEngine?.isReady ?: false,
+            semanticCandidateCount = semanticCandidateCount,
+            mergeTimeMs = mergeTimeMs
+        )
+    }
+
+    private suspend fun executeFilterWithDiagnostics(
+        filter: StructuredFilter,
+        uiLang: AppLanguage
+    ): Pair<List<Pair<MediaAsset, Set<String>>>, List<RecallDimension>> {
+        val resultMap = mutableMapOf<Long, Pair<MediaAsset, MutableSet<String>>>()
+        val breakdown = mutableListOf<RecallDimension>()
+
+        applyTimeRangeWithDiagnostics(filter, resultMap, breakdown)
+        applyContentKeywordsWithDiagnostics(filter.keywords, uiLang, resultMap, breakdown)
+        applyOcrKeywordsWithDiagnostics(filter.ocrKeywords, resultMap, breakdown)
+        applyLocationKeywordsWithDiagnostics(filter.locationKeywords, resultMap, breakdown)
+        applyFaceFilterWithDiagnostics(filter.hasFaces, resultMap, breakdown)
+        applyPeopleFallbackWithDiagnostics(filter.keywords, resultMap, breakdown)
+
+        return resultMap.values.map { it.first to it.second.toSet() } to breakdown
+    }
+
+    private suspend fun applyTimeRangeWithDiagnostics(
+        filter: StructuredFilter,
+        resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>,
+        breakdown: MutableList<RecallDimension>
+    ) {
+        val timeRange = filter.timeRange ?: return
+        val start = System.currentTimeMillis()
+        var count = 0
+        mediaDao.searchByTimeRange(timeRange.startMs, timeRange.endMs).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("time_range")
+            resultMap[entity.id] = media to dims
+            count++
+        }
+        breakdown.add(RecallDimension("Time", count, System.currentTimeMillis() - start))
+    }
+
+    private suspend fun applyContentKeywordsWithDiagnostics(
+        keywords: List<String>,
+        uiLang: AppLanguage,
+        resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>,
+        breakdown: MutableList<RecallDimension>
+    ) {
+        val start = System.currentTimeMillis()
+        var count = 0
+        for (keyword in keywords) {
+            val candidates = tagTranslator.expandForSearch(keyword, uiLang)
+            for (candidate in candidates) {
+                val before = resultMap.size
+                searchByCandidateWithDiagnostics(candidate, resultMap)
+                count += resultMap.size - before
+            }
+        }
+        breakdown.add(RecallDimension("Tag/OCR/Label/File", count, System.currentTimeMillis() - start))
+    }
+
+    private suspend fun applyOcrKeywordsWithDiagnostics(
+        ocrKeywords: List<String>,
+        resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>,
+        breakdown: MutableList<RecallDimension>
+    ) {
+        val start = System.currentTimeMillis()
+        var count = 0
+        for (keyword in ocrKeywords) {
+            val before = resultMap.size
+            if (ocrWordDao != null) {
+                ocrWordDao.searchByExactWord(keyword.lowercase()).forEach { entity ->
+                    val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                    dims.add("ocr_exact")
+                    resultMap[entity.id] = media to dims
+                }
+            }
+            mediaDao.searchByOcrText(keyword).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("ocr")
+                resultMap[entity.id] = media to dims
+            }
+            count += resultMap.size - before
+        }
+        breakdown.add(RecallDimension("OCR", count, System.currentTimeMillis() - start))
+    }
+
+    private suspend fun applyLocationKeywordsWithDiagnostics(
+        locationKeywords: List<String>,
+        resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>,
+        breakdown: MutableList<RecallDimension>
+    ) {
+        val start = System.currentTimeMillis()
+        var count = 0
+        for (keyword in locationKeywords) {
+            val before = resultMap.size
+            if (locationDao != null) {
+                locationDao.searchByPlace(keyword).forEach { entity ->
+                    val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                    dims.add("location")
+                    resultMap[entity.id] = media to dims
+                }
+            }
+            mediaDao.searchByLocation(keyword).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("location_name")
+                resultMap[entity.id] = media to dims
+            }
+            count += resultMap.size - before
+        }
+        breakdown.add(RecallDimension("Location", count, System.currentTimeMillis() - start))
+    }
+
+    private suspend fun applyFaceFilterWithDiagnostics(
+        hasFaces: Boolean?,
+        resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>,
+        breakdown: MutableList<RecallDimension>
+    ) {
+        if (hasFaces != true) return
+        val start = System.currentTimeMillis()
+        var count = 0
+        mediaDao.searchByHasFace().forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            if (dims.add("has_face")) count++
+            resultMap[entity.id] = media to dims
+        }
+        breakdown.add(RecallDimension("Face", count, System.currentTimeMillis() - start))
+    }
+
+    private suspend fun applyPeopleFallbackWithDiagnostics(
+        keywords: List<String>,
+        resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>,
+        breakdown: MutableList<RecallDimension>
+    ) {
+        if (keywords.none { it in PEOPLE_SEARCH_KEYWORDS }) return
+        val start = System.currentTimeMillis()
+        var count = 0
+        mediaDao.searchByHasFace().forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            if (dims.add("has_face")) count++
+            resultMap[entity.id] = media to dims
+        }
+        breakdown.add(RecallDimension("PeopleFallback", count, System.currentTimeMillis() - start))
+    }
+
+    private suspend fun searchByCandidateWithDiagnostics(
+        candidate: String,
+        resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>
+    ) {
+        if (tagDao != null) {
+            tagDao.searchByExactTag(candidate).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("tag_exact")
+                resultMap[entity.id] = media to dims
+            }
+        }
+        if (ocrWordDao != null) {
+            ocrWordDao.searchByWordPrefix(candidate.lowercase()).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("ocr_prefix")
+                resultMap[entity.id] = media to dims
+            }
+        }
+        mediaDao.searchByLabel(candidate).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("label")
+            resultMap[entity.id] = media to dims
+        }
+        mediaDao.searchByOcrText(candidate).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("ocr")
+            resultMap[entity.id] = media to dims
+        }
+        mediaDao.searchByFileName(candidate).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("file_name")
+            resultMap[entity.id] = media to dims
+        }
+    }
+
+    @Suppress("LongParameterList")
+    private fun buildDiagnosticsResult(
+        query: String,
+        parsedFilter: StructuredFilter?,
+        usedLlm: Boolean,
+        llmFilter: StructuredFilter?,
+        parseTimeMs: Long,
+        sqlRecallTimeMs: Long,
+        sqlResults: List<DiagnosticMediaItem>,
+        semanticResults: List<DiagnosticSemanticItem>,
+        mergedResults: List<DiagnosticMediaItem>,
+        recallBreakdown: List<RecallDimension>,
+        totalStart: Long,
+        enableSemanticSearch: Boolean,
+        semanticEngineReady: Boolean,
+        semanticCandidateCount: Int,
+        mergeTimeMs: Long = 0L
+    ): SearchDiagnosticsResult {
+        return SearchDiagnosticsResult(
+            originalQuery = query,
+            parsedFilter = parsedFilter,
+            needsLlm = parsedFilter?.needsLlm ?: true,
+            usedLlm = usedLlm,
+            llmFilter = llmFilter,
+            metrics = SearchMetrics(
+                totalTimeMs = System.currentTimeMillis() - totalStart,
+                parseTimeMs = parseTimeMs,
+                sqlRecallTimeMs = sqlRecallTimeMs,
+                semanticRecallTimeMs = recallBreakdown.find { it.name == "Semantic" }?.timeMs ?: 0L,
+                mergeTimeMs = mergeTimeMs,
+                semanticEngineReady = semanticEngineReady,
+                semanticCandidateCount = semanticCandidateCount
+            ),
+            recallBreakdown = recallBreakdown,
+            sqlResults = sqlResults,
+            semanticResults = semanticResults,
+            mergedResults = mergedResults,
+            enableSemanticSearch = enableSemanticSearch
+        )
+    }
+
     companion object {
         private const val TAG = "MediaSearchEngine"
 
-        /** 人物语义搜索关键词 */
+        /** SQL 召回基础分权重（语义搜索优先，SQL 仅作辅助召回） */
+        private const val SQL_SCORE_WEIGHT = 0.25f
+
+        /** 语义召回相似度权重（提高语义分占比，让 CLIP 结果排在前面） */
+        private const val SEMANTIC_SCORE_WEIGHT = 0.65f
+
+        /** 时间衰减权重 */
+        private const val TIME_SCORE_WEIGHT = 0.1f
+
+        /** 一天毫秒数 */
+        private val MS_PER_DAY = TimeUnit.DAYS.toMillis(1)
+
+        /** 近期照片天数阈值 */
+        private const val TIME_BOOST_RECENT_DAYS = 30
+
+        /** 一年内照片天数阈值 */
+        private const val TIME_BOOST_YEAR_DAYS = 365
+
+        /** 近期照片时间 boost */
+        private const val TIME_BOOST_RECENT = 0.3f
+
+        /** 一年内照片时间 boost */
+        private const val TIME_BOOST_YEAR = 0.15f
+
+        /** 无时间 boost */
+        private const val NO_TIME_BOOST = 0f
+
+        /** 人物语义搜索关键词（含儿童/婴儿等同义概念） */
         val PEOPLE_SEARCH_KEYWORDS = setOf(
             "人", "人物", "人脸", "合照", "合影", "自拍", "头像",
-            "people", "person", "face", "portrait", "selfie"
+            "小孩", "儿童", "婴儿", "宝宝", "孩子",
+            "people", "person", "face", "portrait", "selfie",
+            "child", "children", "kid", "kids", "baby", "infant", "toddler"
         )
     }
 }
@@ -417,6 +814,62 @@ data class SearchResult(
     val media: List<MediaAsset>,
     val originalQuery: String,
     val resultCount: Int = media.size
+)
+
+/**
+ * 搜索召回诊断结果（搜索测试页专用）。
+ */
+data class SearchDiagnosticsResult(
+    val originalQuery: String,
+    val parsedFilter: StructuredFilter?,
+    val needsLlm: Boolean,
+    val usedLlm: Boolean,
+    val llmFilter: StructuredFilter?,
+    val metrics: SearchMetrics,
+    val recallBreakdown: List<RecallDimension>,
+    val sqlResults: List<DiagnosticMediaItem>,
+    val semanticResults: List<DiagnosticSemanticItem>,
+    val mergedResults: List<DiagnosticMediaItem>,
+    val enableSemanticSearch: Boolean
+)
+
+/**
+ * 搜索耗时与状态指标。
+ */
+data class SearchMetrics(
+    val totalTimeMs: Long,
+    val parseTimeMs: Long,
+    val sqlRecallTimeMs: Long,
+    val semanticRecallTimeMs: Long,
+    val mergeTimeMs: Long,
+    val semanticEngineReady: Boolean,
+    val semanticCandidateCount: Int
+)
+
+/**
+ * 单个召回维度的统计。
+ */
+data class RecallDimension(
+    val name: String,
+    val count: Int,
+    val timeMs: Long
+)
+
+/**
+ * 诊断结果中的媒体项（含命中维度）。
+ */
+data class DiagnosticMediaItem(
+    val media: MediaAsset,
+    val score: Float,
+    val matchDimensions: List<String>
+)
+
+/**
+ * 语义召回诊断项。
+ */
+data class DiagnosticSemanticItem(
+    val media: MediaAsset,
+    val score: Float
 )
 
 /**
@@ -440,3 +893,11 @@ private fun com.mamba.picme.data.model.MediaEntity.toDomain() =
         locationName = locationName,
         indexedAt = indexedAt
     )
+
+/**
+ * 带融合分数的媒体（内部使用，不公开）。
+ */
+private data class ScoredMediaAsset(
+    val media: MediaAsset,
+    val score: Float
+)

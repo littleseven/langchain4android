@@ -170,13 +170,13 @@ interface MediaDao {
     @Query("SELECT faceRoiResult FROM media_assets WHERE id = :mediaId")
     suspend fun getFaceRoiResult(mediaId: Long): String?
 
-    // ── MobileCLIP 语义编码（Pass 4）──────────────────────────
+    // ── MobileCLIP 语义编码（已内联合并到 Pass 1）──────────────────────────
 
     /** 更新语义 embedding */
     @Query("UPDATE media_assets SET semanticEmbedding = :embedding WHERE id = :mediaId")
     suspend fun updateSemanticEmbedding(mediaId: Long, embedding: String)
 
-    /** 获取未编码语义 embedding 的媒体（已有 labels 但无 semanticEmbedding） */
+    /** 获取未编码语义 embedding 的媒体（已有 labels 但无 semanticEmbedding）。用于单独重编码场景。 */
     @Query("SELECT * FROM media_assets WHERE labels IS NOT NULL AND labels != '' AND semanticEmbedding IS NULL ORDER BY captureDate DESC")
     suspend fun getMediaNeedingSemanticEncoding(): List<MediaEntity>
 
@@ -188,11 +188,11 @@ interface MediaDao {
     @Query("SELECT * FROM media_assets WHERE semanticEmbedding IS NOT NULL AND semanticEmbedding != '' ORDER BY captureDate DESC")
     suspend fun getMediaWithSemanticEmbedding(): List<MediaEntity>
 
-    /** 检查是否有待语义编码的媒体 */
+    /** 检查是否有待语义编码的媒体（用于单独重编码场景） */
     @Query("SELECT COUNT(*) > 0 FROM media_assets WHERE labels IS NOT NULL AND labels != '' AND semanticEmbedding IS NULL")
     suspend fun hasPendingSemanticEncoding(): Boolean
 
-    /** 重置所有语义 embedding（用于强制重新编码） */
+    /** 重置所有语义 embedding（用于强制重新编码/清理污染数据） */
     @Query("UPDATE media_assets SET semanticEmbedding = NULL")
     suspend fun resetAllSemanticEmbeddings()
 
