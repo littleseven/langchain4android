@@ -77,7 +77,9 @@ class TagGenerationService : Service() {
         const val ACTION_SCAN_ALL = "com.mamba.picme.tag.SCAN_ALL"
         const val ACTION_SCAN_INCREMENTAL = "com.mamba.picme.tag.SCAN_INCREMENTAL"
         const val ACTION_SCAN_PASS_1 = "com.mamba.picme.tag.SCAN_PASS_1"
+        const val ACTION_SCAN_PASS_1_FULL = "com.mamba.picme.tag.SCAN_PASS_1_FULL"
         const val ACTION_SCAN_PASS_2 = "com.mamba.picme.tag.SCAN_PASS_2"
+        const val ACTION_SCAN_PASS_2_FULL = "com.mamba.picme.tag.SCAN_PASS_2_FULL"
         const val ACTION_SCAN_PASS_3 = "com.mamba.picme.tag.SCAN_PASS_3"
         const val ACTION_SCAN_PASS_3_FULL = "com.mamba.picme.tag.SCAN_PASS_3_FULL"
         /** 单独执行 MobileCLIP 语义编码（增量）。常规扫描已将该阶段内联合并到 Pass 1。 */
@@ -102,7 +104,9 @@ class TagGenerationService : Service() {
         fun intentScanAll(context: Context) = intent(context, ACTION_SCAN_ALL)
         fun intentScanIncremental(context: Context) = intent(context, ACTION_SCAN_INCREMENTAL)
         fun intentScanPass1(context: Context) = intent(context, ACTION_SCAN_PASS_1)
+        fun intentScanPass1Full(context: Context) = intent(context, ACTION_SCAN_PASS_1_FULL)
         fun intentScanPass2(context: Context) = intent(context, ACTION_SCAN_PASS_2)
+        fun intentScanPass2Full(context: Context) = intent(context, ACTION_SCAN_PASS_2_FULL)
         fun intentScanPass3(context: Context) = intent(context, ACTION_SCAN_PASS_3)
         fun intentScanPass3Full(context: Context) = intent(context, ACTION_SCAN_PASS_3_FULL)
         fun intentScanPass4(context: Context) = intent(context, ACTION_SCAN_PASS_4)
@@ -286,7 +290,17 @@ class TagGenerationService : Service() {
                     com.mamba.picme.domain.tag.scan.TagScanQuery(),
                     com.mamba.picme.domain.tag.scan.ScanMode.INCREMENTAL
                 )
+                ACTION_SCAN_PASS_1_FULL -> orch.schedulePass(
+                    com.mamba.picme.data.local.entity.TagScanPass.FACE_DETECTION,
+                    com.mamba.picme.domain.tag.scan.TagScanQuery(),
+                    com.mamba.picme.domain.tag.scan.ScanMode.FULL
+                )
                 ACTION_SCAN_PASS_2 -> orch.schedulePass(
+                    com.mamba.picme.data.local.entity.TagScanPass.DBSCAN,
+                    com.mamba.picme.domain.tag.scan.TagScanQuery(),
+                    com.mamba.picme.domain.tag.scan.ScanMode.INCREMENTAL
+                )
+                ACTION_SCAN_PASS_2_FULL -> orch.schedulePass(
                     com.mamba.picme.data.local.entity.TagScanPass.DBSCAN,
                     com.mamba.picme.domain.tag.scan.TagScanQuery(),
                     com.mamba.picme.domain.tag.scan.ScanMode.FULL

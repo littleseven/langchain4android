@@ -339,6 +339,67 @@ fun TagGenerationControlScreen(
                         )
                         Spacer(Modifier.height(8.dp))
 
+                        PassControlCard(
+                            title = "Pass 1：人脸检测 + MobileCLIP 语义编码",
+                            subtitle = "RetinaFace + MobileCLIP-S0：检测人脸并提取语义向量",
+                            onIncremental = {
+                                refreshStats()
+                                context.startForegroundService(TagGenerationService.intentScanPass1(context))
+                            },
+                            onFull = {
+                                refreshStats()
+                                context.startForegroundService(TagGenerationService.intentScanPass1Full(context))
+                            }
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        PassControlCard(
+                            title = "Pass 2：DBSCAN 人脸聚类",
+                            subtitle = "基于全量人脸 Embedding 进行全局聚类",
+                            onIncremental = {
+                                refreshStats()
+                                context.startForegroundService(TagGenerationService.intentScanPass2(context))
+                            },
+                            onFull = {
+                                refreshStats()
+                                context.startForegroundService(TagGenerationService.intentScanPass2Full(context))
+                            }
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        PassControlCard(
+                            title = "Pass 3：Qwen 图像理解标签",
+                            subtitle = "Qwen3.5-2B：生成场景、物体、活动、摘要等标签",
+                            onIncremental = {
+                                refreshStats()
+                                context.startForegroundService(TagGenerationService.intentScanPass3(context))
+                            },
+                            onFull = {
+                                refreshStats()
+                                context.startForegroundService(TagGenerationService.intentScanPass3Full(context))
+                            }
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+
+                        // ── MobileCLIP 语义编码单独重编码（兼容/高级） ──────────
+                        Text(
+                            "MobileCLIP 语义编码单独重编码",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "仅重新生成语义向量，不影响人脸检测与标签结果。常规扫描已内联合并到 Pass 1。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -346,66 +407,24 @@ fun TagGenerationControlScreen(
                             OutlinedButton(
                                 onClick = {
                                     refreshStats()
-                                    context.startForegroundService(TagGenerationService.intentScanPass1(context))
+                                    context.startForegroundService(TagGenerationService.intentScanPass4(context))
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Pass 1")
+                                Text("增量生成")
                             }
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     refreshStats()
-                                    context.startForegroundService(TagGenerationService.intentScanPass2(context))
+                                    context.startForegroundService(TagGenerationService.intentScanPass4Full(context))
                                 },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiary
+                                ),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Pass 2")
+                                Text("全部重新生成")
                             }
-                            OutlinedButton(
-                                onClick = {
-                                    refreshStats()
-                                    context.startForegroundService(TagGenerationService.intentScanPass3(context))
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Pass 3")
-                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        // ── Pass 3 重新生成（清空重标） ──────────
-                        Button(
-                            onClick = {
-                                refreshStats()
-                                context.startForegroundService(TagGenerationService.intentScanPass3Full(context))
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.tertiary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Pass 3 重新生成")
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        // ── MobileCLIP 语义编码单独重新生成（清空重编码） ──────────
-                        Button(
-                            onClick = {
-                                refreshStats()
-                                context.startForegroundService(TagGenerationService.intentScanPass4Full(context))
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.tertiary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("MobileCLIP 语义编码重新生成")
                         }
 
                         Spacer(Modifier.height(8.dp))
@@ -677,6 +696,57 @@ private fun passDisplayName(pass: TagScanPass?): String = when (pass) {
     TagScanPass.QWEN_TAGGING -> "Pass 3: Qwen 标签"
     TagScanPass.MOBILE_CLIP_ENCODING -> "MobileCLIP 语义编码（单独）"
     null -> "准备中"
+}
+
+@Composable
+private fun PassControlCard(
+    title: String,
+    subtitle: String,
+    onIncremental: () -> Unit,
+    onFull: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onIncremental,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("增量生成")
+                }
+                Button(
+                    onClick = onFull,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("全部重新生成")
+                }
+            }
+        }
+    }
 }
 
 private fun formatDuration(ms: Long): String {
