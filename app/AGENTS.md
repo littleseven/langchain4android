@@ -80,6 +80,7 @@ di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 | `usecase/` | `AiAgentUseCase`, `FindDuplicateMediaUseCase`, `GetGroupedMediaUseCase`, `OcrUseCase` | 业务用例：Agent Facade、去重、分组、OCR |
 | `repository/` | `MediaRepository`, `UserPreferencesRepository`, `UserSettingsRepository` 等接口 | 仓储抽象 |
 | `model/` | `AiAgentCommand`, `LlmProviderConfig`, `MediaAsset`, `UserPreferences` 等 | 领域数据模型 |
+| `search/` | `MediaSearchEngine`, `ExplicitFirstSearchPipeline`, `QuerySegmenter`, `QueryParser`, `SegmentedQuery`, `ExplicitFilter`, `ContentFilter` | 自然语言图片搜索：显式约束优先分段检索 + 规则/LLM/语义混合排序 |
 | `tag/` | `TagGenerationScheduler`, `TagScanOrchestrator`, `OpenClGuardian`, `TagCategory`, `MlKitTagExtractor` | TAG 生成编排、OpenCL 守护、类别定义、ML Kit 英文标签提取 |
 | `preview/` | `BeautyPreviewProvider` | 美颜预览提供者接口 |
 
@@ -128,6 +129,7 @@ di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 | 人脸检测 | `FaceDetector`（beauty-api 接口） | MediaPipe/MNN/NCNN 多引擎 |
 | 远程推理 | `RemoteOrchestrator`（agent-core） | OpenAI Chat Completions API + langchain4j |
 | TAG 生成 | `TagGenerationService` → `TagScanOrchestrator` | 3-Pass 混合管道 + 独立 ML Kit 英文标签 Pass，`mlKitLabels` 字段与 Qwen `labels` 字段解耦，OpenCL 超时自动降级 CPU |
+| 自然语言搜索 | `GallerySearchBar` → `MediaSearchEngine` | Layer 0.5 显式约束优先分段检索（时间/地点/人脸→内容关键词）；Layer 1 QueryParser 规则；Layer 2 LLM；Layer 2.5 MobileCLIP 语义；Layer 3 融合排序 |
 | 飞书远程控制 | `PicMeApplication` → Feishu SDK | IM 远程命令与照片回传 |
 
 ---
@@ -190,5 +192,5 @@ di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 ---
 
 > **维护者**：[RD] 全栈工程师
-> **最后更新**：2026-06-26
+> **最后更新**：2026-06-30
 > **状态**：生效中
