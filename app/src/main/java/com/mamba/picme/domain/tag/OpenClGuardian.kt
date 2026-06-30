@@ -185,7 +185,12 @@ class OpenClGuardian(
     private suspend fun ensureCpuLoaded() {
         // 如果当前模型不是 CPU 加载，则切换
         engine.unload()
-        engine.loadModel("qwen3_5_2b", useOpencl = false)
+        val orchestrator = com.mamba.picme.agent.core.facade.AgentOrchestrator.getInstance(context)
+        orchestrator.ensureModelLoaded(
+            modelId = "qwen3_5_2b",
+            useOpencl = false,
+            caller = "OpenClGuardian:ensureCpuLoaded"
+        )
     }
 
     private suspend fun isDeviceBlacklisted(): Boolean {

@@ -391,28 +391,31 @@ fun MediaPager(
                             }
                             if (bitmap != null) {
                                 val orchestrator = AgentOrchestrator.getInstance(context)
-                                val engine = orchestrator.getLlmEngine()
 
-                                // 确保模型已加载（参考 TagGenerationScheduler.ensureModelLoaded）
-                                val modelKey = "qwen3_5_2b"
-                                if (!engine.isLoaded) {
-                                    Log.d("Gallery", "LLM not loaded, loading model: $modelKey")
-                                    val loadResult = engine.loadModel(modelKey, useOpencl = false)
-                                    if (loadResult.isFailure) {
-                                        visionResult = "模型加载失败: ${loadResult.exceptionOrNull()?.message}"
-                                        bitmap.recycle()
-                                        isVisionLoading = false
-                                        return@launch
-                                    }
-                                    Log.d("Gallery", "LLM model loaded successfully")
+                                // 确保模型已加载并执行图像推理
+                                val inferenceResult = orchestrator.withModelLoaded(
+                                    modelId = "qwen3_5_2b",
+                                    useOpencl = false,
+                                    caller = "MediaPager:imageInference"
+                                ) { engine ->
+                                    engine.imageInference(
+                                        bitmap = bitmap,
+                                        systemPrompt = "你是一个图像理解助手。请用简洁的中文描述这张图片的内容，包括主要对象、场景、颜色和氛围。",
+                                        userPrompt = "请描述这张图片",
+                                        maxTokens = 128
+                                    )
                                 }
 
-                                val result = engine.imageInference(
-                                    bitmap = bitmap,
-                                    systemPrompt = "你是一个图像理解助手。请用简洁的中文描述这张图片的内容，包括主要对象、场景、颜色和氛围。",
-                                    userPrompt = "请描述这张图片",
-                                    maxTokens = 128
-                                )
+                                val result = if (inferenceResult.isSuccess) {
+                                    inferenceResult.getOrThrow()
+                                } else {
+                                    val error = inferenceResult.exceptionOrNull()
+                                    Log.e("Gallery", "Vision inference failed", error)
+                                    visionResult = "模型加载失败: ${error?.message ?: "未知错误"}"
+                                    bitmap.recycle()
+                                    isVisionLoading = false
+                                    return@launch
+                                }
                                 visionResult = result.ifEmpty { "模型返回了空结果" }
                                 bitmap.recycle()
                             } else {

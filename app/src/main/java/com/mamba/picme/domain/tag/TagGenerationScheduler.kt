@@ -579,7 +579,8 @@ class TagGenerationScheduler(
     }
 
     private suspend fun ensureModelLoaded(): Boolean {
-        val engine = AgentOrchestrator.getInstance(context).getLlmEngine()
+        val orchestrator = AgentOrchestrator.getInstance(context)
+        val engine = orchestrator.getLlmEngine()
 
         if (!engine.isModelAvailable(MODEL_KEY, context)) {
             Log.w(TAG, "Model not downloaded: $MODEL_KEY")
@@ -602,7 +603,11 @@ class TagGenerationScheduler(
         // OpenCL GPU 路径（如果允许）→ 失败后降级 CPU
         if (!useCpu) {
             Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
-            val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
+            val openclResult = orchestrator.ensureModelLoaded(
+                modelId = MODEL_KEY,
+                useOpencl = true,
+                caller = "TagGenerationScheduler:OpenCL"
+            )
             if (openclResult.isSuccess) {
                 Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
                 // 加载成功后执行轻量 warmup，验证 OpenCL 可实际推理
@@ -621,7 +626,11 @@ class TagGenerationScheduler(
 
         // CPU 加载（默认路径 + OpenCL 失败/降级）
         Log.i(TAG, "Loading LLM model with CPU: $MODEL_KEY")
-        val cpuResult = engine.loadModel(MODEL_KEY, useOpencl = false)
+        val cpuResult = orchestrator.ensureModelLoaded(
+            modelId = MODEL_KEY,
+            useOpencl = false,
+            caller = "TagGenerationScheduler:CPU"
+        )
         return if (cpuResult.isSuccess) {
             Log.i(TAG, "Model loaded with CPU")
             true

@@ -221,7 +221,7 @@ PicMe（觅影相册）当前在端侧同时运行 **7 套推理框架**、**14+
    - 即使 KWS/ASR 已迁移到 Sherpa-ONNX，MNN 仍被人脸检测和 LLM 共享，释放顺序和线程安全仍是隐患。
 
 3. **LLM 单例与多入口加载责任分散**
-   - 8 处 `loadModel()` 调用点（`ChatViewModel`、`AiAgentUseCase`、`TagGenerationScheduler`、`OpenClGuardian`、`ImageTagIndexingWorker`、`MediaPager` 等），虽最终汇聚到同一 `LocalLlmEngine`，但各调用方自行处理加载检查，容易遗漏（`MediaPager` 已修复一次）。
+   - ~~8 处 `loadModel()` 调用点自行处理加载检查~~ 已统一封装到 `AgentOrchestrator.ensureModelLoaded()` / `withModelLoaded()`，所有 `imageInference()` / `generate()` / `chat()` 入口均走统一加载检查，消除遗漏风险。
 
 ### 6.2 模型层问题
 

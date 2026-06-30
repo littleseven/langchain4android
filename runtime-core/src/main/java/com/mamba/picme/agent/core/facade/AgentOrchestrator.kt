@@ -196,20 +196,11 @@ class AgentOrchestrator private constructor(context: Context) {
 
     /**
      * 加载本地模型
+     *
+     * @param modelId 模型 ID，为空时使用当前配置模型
      */
     suspend fun loadModel(modelId: String? = null): Result<Unit> {
-        val targetModel = modelId ?: configurator.getCurrentModelId()
-
-        if (!localLlmEngine.isModelAvailable(targetModel, configurator.getContext())) {
-            Logger.w(tag, "Model not downloaded: $targetModel")
-            return Result.failure(
-                LlmModelNotFoundException(
-                    "模型未下载，请前往设置 → AI 模型管理下载 $targetModel"
-                )
-            )
-        }
-
-        return localLlmEngine.loadModel(targetModel, configurator.getLocalUseOpencl())
+        return ensureModelLoaded(modelId = modelId, caller = "loadModel")
     }
 
     /**
@@ -217,6 +208,92 @@ class AgentOrchestrator private constructor(context: Context) {
      */
     fun unloadModel() {
         localLlmEngine.unload()
+    }
+
+    /**
+     * 确保本地模型已加载。
+     *
+     * 所有本地 LLM 推理入口应统一通过此方法（或 [withModelLoaded]）加载模型，
+     * 避免调用方遗漏加载检查导致空结果或崩溃。
+     *
+     * @param modelId 模型 ID，为空时使用当前配置模型
+     * @param useOpencl 是否使用 OpenCL，为 null 时使用当前配置
+     * @param caller 调用方标识，用于加载审计日志
+     * @return 加载结果
+     */
+    suspend fun ensureModelLoaded(
+        modelId: String? = null,
+        useOpencl: Boolean? = null,
+        caller: String = "unknown"
+    ): Result<Unit> {
+        val targetModel = modelId ?: configurator.getCurrentModelId()
+        val targetUseOpencl = useOpencl ?: configurator.getLocalUseOpencl()
+
+        if (targetModel.isBlank()) {
+            Logger.w(tag, "[ModelLoadAudit] caller=$caller, modelId is blank")
+            return Result.failure(IllegalStateException("未配置模型 ID"))
+        }
+
+        Logger.i(
+            tag,
+            "[ModelLoadAudit] caller=$caller, model=$targetModel, " +
+                "useOpencl=$targetUseOpencl, alreadyLoaded=${localLlmEngine.isLoaded}"
+        )
+
+        if (!localLlmEngine.isModelAvailable(targetModel, configurator.getContext())) {
+            Logger.w(tag, "[ModelLoadAudit] caller=$caller, model not downloaded: $targetModel")
+            return Result.failure(
+                LlmModelNotFoundException(
+                    "模型未下载，请前往设置 → AI 模型管理下载 $targetModel"
+                )
+            )
+        }
+
+        val result = localLlmEngine.loadModel(targetModel, targetUseOpencl)
+
+        result.onSuccess {
+            Logger.i(tag, "[ModelLoadAudit] caller=$caller, model loaded successfully")
+        }.onFailure { error ->
+            Logger.e(tag, "[ModelLoadAudit] caller=$caller, model load failed", error)
+        }
+
+        return result
+    }
+
+    /**
+     * 在模型已加载的前提下执行推理块。
+     *
+     * 如果模型未加载，会先尝试加载，成功后再执行 [inferenceBlock]。
+     * 所有 imageInference / generate / chat 等本地 LLM 调用应统一走此入口。
+     *
+     * @param modelId 模型 ID，为空时使用当前配置模型
+     * @param useOpencl 是否使用 OpenCL，为 null 时使用当前配置
+     * @param caller 调用方标识，用于加载审计日志
+     * @param inferenceBlock 推理逻辑块，接收 [LocalLlmEngine]
+     * @return 推理结果；加载失败时返回 failure
+     */
+    suspend fun <T> withModelLoaded(
+        modelId: String? = null,
+        useOpencl: Boolean? = null,
+        caller: String = "unknown",
+        inferenceBlock: suspend (LocalLlmEngine) -> T
+    ): Result<T> {
+        val loadResult = ensureModelLoaded(
+            modelId = modelId,
+            useOpencl = useOpencl,
+            caller = "$caller→withModelLoaded"
+        )
+        if (loadResult.isFailure) {
+            @Suppress("UNCHECKED_CAST")
+            return loadResult as Result<T>
+        }
+
+        return try {
+            Result.success(inferenceBlock(localLlmEngine))
+        } catch (e: Exception) {
+            Logger.e(tag, "[ModelLoadAudit] caller=$caller, inference failed", e)
+            Result.failure(e)
+        }
     }
 
     /**
@@ -267,7 +344,7 @@ class AgentOrchestrator private constructor(context: Context) {
         if (configurator.getAgentMode() != AiAgentMode.OFF) {
             if (!localLlmEngine.isLoaded) {
                 Logger.i(tag, "[RouterEntry] Local model not loaded, attempting load")
-                val loadResult = tryLoadModel()
+                val loadResult = ensureModelLoaded(caller = "processInputWithRouter")
                 if (loadResult.isFailure) {
                     Logger.e(tag, "[RouterEntry] Local model load failed")
                 } else {
@@ -358,7 +435,7 @@ class AgentOrchestrator private constructor(context: Context) {
     ): Result<StreamChatResult> {
         // 确保模型已加载
         if (!localLlmEngine.isLoaded) {
-            val loadResult = tryLoadModel()
+            val loadResult = ensureModelLoaded(caller = "streamChatLocal")
             if (loadResult.isFailure) {
                 return Result.failure(
                     RuntimeException("本地模型未加载：${loadResult.exceptionOrNull()?.message ?: "未知错误"}")
@@ -606,7 +683,7 @@ class AgentOrchestrator private constructor(context: Context) {
             AiAgentMode.LOCAL -> {
                 // 本地模式：使用 MNN-LLM
                 if (!localLlmEngine.isLoaded) {
-                    val loadResult = tryLoadModel()
+                    val loadResult = ensureModelLoaded(caller = "processUserInput:LOCAL")
                     if (loadResult.isFailure) {
                         return@withContext handleModelLoadError(loadResult)
                     }
@@ -657,7 +734,7 @@ class AgentOrchestrator private constructor(context: Context) {
                 // REMOTE/FEISHU 模式统一使用本地推理
                 Logger.d(tag, "Using local LLM for ${configurator.getAgentMode()} mode")
                 if (!localLlmEngine.isLoaded) {
-                    val loadResult = tryLoadModel()
+                    val loadResult = ensureModelLoaded(caller = "processUserInput:${configurator.getAgentMode()}")
                     if (loadResult.isFailure) {
                         return@withContext handleModelLoadError(loadResult)
                     }
@@ -698,16 +775,7 @@ class AgentOrchestrator private constructor(context: Context) {
         return@withContext handleInferenceResult(inferenceResult, input, agentContext, pageContext)
     }
 
-    /**
-     * 尝试加载模型
-     */
-    private suspend fun tryLoadModel(): Result<Unit> {
-        return if (configurator.getCurrentModelId().isNotBlank()) {
-            loadModel(configurator.getCurrentModelId())
-        } else {
-            Result.failure(IllegalStateException("未配置模型 ID"))
-        }
-    }
+
 
     /**
      * 处理模型加载错误

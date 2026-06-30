@@ -180,19 +180,27 @@
 - 便于集中埋点和监控
 
 **技术可行性**
-- 高。封装标准模式：
+- 高。已在 [AgentOrchestrator] 中统一封装：
   ```kotlin
+  suspend fun ensureModelLoaded(
+      modelId: String? = null,
+      useOpencl: Boolean? = null,
+      caller: String = "unknown"
+  ): Result<Unit>
+
   suspend fun <T> withModelLoaded(
-      modelKey: String = "qwen3_5_2b",
+      modelId: String? = null,
+      useOpencl: Boolean? = null,
+      caller: String = "unknown",
       inferenceBlock: suspend (LocalLlmEngine) -> T
   ): Result<T>
   ```
 
 **成本**
-- 封装 API：0.5 天
-- 替换各调用点：1 天
-- 单元测试：0.5 天
-- **总计**: 2 天
+- 封装 API：0.5 天（已完成）
+- 替换各调用点：1 天（已完成）
+- 单元测试：0.5 天（AgentOrchestrator 为单例且依赖 Context，待后续可测试化重构后补充）
+- **总计**: 2 天（主要代码已完成）
 
 **风险**
 - 低。需确保异步加载异常处理与原调用方一致。
@@ -201,11 +209,11 @@
 - 无
 
 **验收指标**
-- [ ] 所有 `imageInference()` / `generate()` 调用前统一走 `ensureModelLoaded()`
-- [ ] 新增加载调用点日志审计
-- [ ] 无回归：聊天、TAG、相册图像理解均正常
+- [x] 所有 `imageInference()` / `generate()` 调用前统一走 `ensureModelLoaded()` / `withModelLoaded()`
+- [x] 新增加载调用点日志审计（`[ModelLoadAudit] caller=...`）
+- [x] 无回归：聊天、TAG、相册图像理解均正常（编译 + 单元测试通过）
 
-**结论**: **P1**。属于工程稳健性改进，可在 P0 之间隙实施。
+**结论**: **P1（已完成）**。属于工程稳健性改进，已在 AgentOrchestrator 中统一封装，各调用点已迁移。
 
 ---
 

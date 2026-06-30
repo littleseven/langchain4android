@@ -14,6 +14,7 @@ import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.inference.local.llm.LlmGenerationMetrics
+import com.mamba.picme.agent.core.inference.local.llm.LlmModelNotFoundException
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.ChatMessageDao
 import com.mamba.picme.data.local.ChatMessageEntity
@@ -572,29 +573,7 @@ class ChatViewModel(
                     modelUsed = currentModelLabel()
                 )
 
-                // 3. 确保本地 LLM 模型已加载（图像推理必须走本地模型）
-                if (!orchestrator.isModelLoaded) {
-                    _streamingMessage.value = ChatMessageUi(
-                        id = streamingId,
-                        type = ChatMessageType.AGENT_TEXT,
-                        content = "正在加载模型...",
-                        modelUsed = currentModelLabel()
-                    )
-                    val loadResult = orchestrator.loadModel()
-                    if (loadResult.isFailure) {
-                        _streamingMessage.value = null
-                        insertAgentMessage(
-                            sessionId,
-                            "模型未加载：${loadResult.exceptionOrNull()?.message ?: "未知错误"}",
-                            "error"
-                        )
-                        return@launch
-                    }
-                }
-
-                val engine = orchestrator.getLlmEngine()
-
-                // 加载 Bitmap
+                // 3. 加载 Bitmap
                 val bitmap = context.contentResolver.openInputStream(imageUri)?.use {
                     BitmapFactory.decodeStream(it)
                 }
@@ -604,13 +583,38 @@ class ChatViewModel(
                     return@launch
                 }
 
-                // 调用图像推理
-                val response = engine.imageInference(
-                    systemPrompt = "你是一个图像理解助手。请用简洁的中文描述这张图片的内容，包括主要对象、场景、颜色和氛围。",
-                    userPrompt = "请描述这张图片",
-                    bitmap = bitmap,
-                    maxTokens = 128
-                )
+                // 4. 确保模型已加载并执行图像推理
+                if (!orchestrator.isModelLoaded) {
+                    _streamingMessage.value = ChatMessageUi(
+                        id = streamingId,
+                        type = ChatMessageType.AGENT_TEXT,
+                        content = "正在加载模型...",
+                        modelUsed = currentModelLabel()
+                    )
+                }
+                val inferenceResult = orchestrator.withModelLoaded(
+                    caller = "ChatViewModel:imageInference"
+                ) { engine ->
+                    engine.imageInference(
+                        systemPrompt = "你是一个图像理解助手。请用简洁的中文描述这张图片的内容，包括主要对象、场景、颜色和氛围。",
+                        userPrompt = "请描述这张图片",
+                        bitmap = bitmap,
+                        maxTokens = 128
+                    )
+                }
+
+                if (inferenceResult.isFailure) {
+                    _streamingMessage.value = null
+                    val error = inferenceResult.exceptionOrNull()
+                    val message = if (error is LlmModelNotFoundException || error?.message?.contains("模型") == true) {
+                        "模型未加载：${error.message ?: "未知错误"}"
+                    } else {
+                        "图像处理出错：${error?.message ?: "未知错误"}"
+                    }
+                    insertAgentMessage(sessionId, message, "error")
+                    return@launch
+                }
+                val response = inferenceResult.getOrThrow()
 
                 // 清除流式占位
                 _streamingMessage.value = null
