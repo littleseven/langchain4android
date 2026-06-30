@@ -21,16 +21,8 @@ object QueryParser {
     /** 当前月份偏移 */
     var currentMonth: Int = Calendar.getInstance().get(Calendar.MONTH) + 1
 
-    /** 中国城市关键词（用于检测地点词） */
-    private val CITY_KEYWORDS = setOf(
-        "北京", "上海", "广州", "深圳", "杭州", "南京", "成都", "重庆",
-        "武汉", "西安", "苏州", "天津", "长沙", "郑州", "东莞", "青岛",
-        "沈阳", "宁波", "昆明", "大连", "厦门", "合肥", "佛山", "福州",
-        "哈尔滨", "济南", "温州", "长春", "石家庄", "常州", "泉州", "南宁",
-        "贵阳", "南昌", "太原", "烟台", "嘉兴", "南通", "金华", "珠海",
-        "惠州", "徐州", "海口", "乌鲁木齐", "兰州", "呼和浩特", "银川", "西宁",
-        "三里屯", "国贸", "陆家嘴", "外滩", "西湖", "故宫", "长城", "天安门"
-    )
+    /** 地点关键词（用于检测地点词） */
+    private val LOCATION_KEYWORDS = SearchVocabulary.LOCATION
 
     /**
      * 解析查询，返回结构化过滤条件
@@ -43,7 +35,7 @@ object QueryParser {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return null
 
-        val timeRange = extractTimeRange(trimmed)
+        val timeRange = parseTimeRange(trimmed)
         val (contentKeywords, locationKeywords) = extractCategorizedKeywords(trimmed, lang)
 
         // 只有时间条件且无复杂语义 → 规则匹配
@@ -113,7 +105,10 @@ object QueryParser {
         }.timeInMillis
     }
 
-    private fun extractTimeRange(query: String): TimeRange? {
+    /**
+     * 解析查询中的时间范围（公开给 QuerySegmenter 复用）
+     */
+    fun parseTimeRange(query: String): TimeRange? {
         // "去年" → 上一年全年
         if (query.contains("去年")) {
             return TimeRange(
@@ -197,7 +192,7 @@ object QueryParser {
         val contentWords = mutableListOf<String>()
 
         for (kw in allKeywords) {
-            if (kw in CITY_KEYWORDS) {
+            if (kw in LOCATION_KEYWORDS) {
                 locationWords.add(kw)
             } else {
                 contentWords.add(kw)

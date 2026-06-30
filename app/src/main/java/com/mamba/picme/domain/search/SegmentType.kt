@@ -1,26 +1,23 @@
 package com.mamba.picme.domain.search
 
-enum class SegmentType {
+enum class SegmentType(
+    val isExplicit: Boolean = false,
+    val isContent: Boolean = false
+) {
     /** 时间：去年3月、今年夏天、上周一等 */
-    TIME,
+    TIME(isExplicit = true),
     /** 地点：北京、室内、海边等 */
-    LOCATION,
+    LOCATION(isExplicit = true),
     /** 人物：小孩、我、宝宝、某个人名等 */
-    PERSON,
+    PERSON(isExplicit = true),
     /** 物体：猫、车、食物等 */
-    OBJECT,
+    OBJECT(isContent = true),
     /** 场景：室内、户外、海滩、餐厅等 */
-    SCENE,
+    SCENE(isContent = true),
     /** 活动：聚餐、运动会、婚礼等 */
-    ACTIVITY,
+    ACTIVITY(isContent = true),
     /** OCR 文字：发票、车牌、菜单等 */
-    OCR,
+    OCR(isContent = true),
     /** 未知/停用词：照片、的、了等 */
     UNKNOWN;
-
-    /** 是否属于显式约束段 */
-    fun isExplicit(): Boolean = this in setOf(TIME, LOCATION, PERSON)
-
-    /** 是否属于内容检索段 */
-    fun isContent(): Boolean = this in setOf(OBJECT, SCENE, ACTIVITY, OCR)
 }
