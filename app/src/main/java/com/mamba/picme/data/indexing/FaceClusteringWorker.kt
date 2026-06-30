@@ -122,7 +122,7 @@ class FaceClusteringWorker(
             dao.resetAllFaceIds()
             personDao.clearAllEmbeddings()
             personDao.clearAllPersons()
-            Logger.i(TAG, "Clustering data reset, starting recluster on ${dao.searchByHasFace().size} media with faces")
+            Logger.i(TAG, "Clustering data reset, starting recluster on ${dao.getHasFaceCount()} media with faces")
             doCluster()
             Logger.i(TAG, "Force recluster completed")
         }

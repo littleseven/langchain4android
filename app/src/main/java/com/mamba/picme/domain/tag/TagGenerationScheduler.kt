@@ -66,6 +66,9 @@ class TagGenerationScheduler(
 
         /** 增量扫描单次最大处理量 */
         private const val INCREMENTAL_MAX_PHOTOS = 50
+
+        /** hasFace 清理时批量加载 MediaEntity 的大小，防止 Java Heap OOM */
+        private const val CLEANUP_BATCH_SIZE = 100
     }
 
     /**
@@ -385,16 +388,19 @@ class TagGenerationScheduler(
      * 重置 hasFace=false 并清除 faceRoiResult，避免误检照片进入人脸分组。
      */
     private suspend fun cleanupInvalidHasFace(dao: com.mamba.picme.data.local.MediaDao) {
-        val allHasFace = dao.searchByHasFace()
+        val allHasFaceIds = dao.getHasFaceIds()
         val mediaWithEmbeddings = personDao.getAllEmbeddings().map { it.mediaId }.toSet()
 
         var cleanedCount = 0
-        for (media in allHasFace) {
-            if (media.id !in mediaWithEmbeddings) {
-                // 无有效 embedding：重置 hasFace 并清除 faceRoiResult
-                dao.updateFaceRoiResult(media.id, "", false)
-                cleanedCount++
-                Log.w(TAG, "Cleanup invalid hasFace: mediaId=${media.id} has no valid embedding, reset hasFace=false")
+        allHasFaceIds.chunked(CLEANUP_BATCH_SIZE).forEach { batchIds ->
+            val batchEntities = dao.getMediaByIds(batchIds)
+            for (media in batchEntities) {
+                if (media.id !in mediaWithEmbeddings) {
+                    // 无有效 embedding：重置 hasFace 并清除 faceRoiResult
+                    dao.updateFaceRoiResult(media.id, "", false)
+                    cleanedCount++
+                    Log.w(TAG, "Cleanup invalid hasFace: mediaId=${media.id} has no valid embedding, reset hasFace=false")
+                }
             }
         }
 

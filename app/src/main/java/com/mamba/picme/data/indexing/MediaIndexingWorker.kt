@@ -112,12 +112,13 @@ class MediaIndexingWorker(
             var indexedCount = 0
             var cancelled = false
             while (!cancelled) {
-                val batch = dao.getUnindexedMedia().take(BATCH_SIZE)
-                if (batch.isEmpty()) {
+                val batchIds = dao.getUnindexedMediaIds().take(BATCH_SIZE)
+                if (batchIds.isEmpty()) {
                     Logger.i(TAG, "All media indexed, total: $indexedCount")
                     break
                 }
 
+                val batch = dao.getMediaByIds(batchIds)
                 for (entity in batch) {
                     if (currentJob?.isActive != true) {
                         cancelled = true
@@ -193,7 +194,7 @@ class MediaIndexingWorker(
             val now = System.currentTimeMillis()
 
             // 查找或创建 Room 记录
-            val existingMedia = dao.getAllMediaNow().find { it.uri == uri.toString() }
+            val existingMedia = dao.getMediaByUri(uri.toString())
             val mediaId: Long = if (existingMedia != null) {
                 dao.updateIndexResult(
                     mediaId = existingMedia.id,
@@ -250,7 +251,8 @@ class MediaIndexingWorker(
         val dao = db.mediaDao()
         val tempExtractor = MetadataExtractor(context)
         try {
-            val firstMedia = dao.getUnindexedMedia().firstOrNull() ?: return true
+            val firstMediaId = dao.getUnindexedMediaIds().firstOrNull() ?: return true
+            val firstMedia = dao.getMediaById(firstMediaId) ?: return true
             val uri = Uri.parse(firstMedia.uri)
             val image = try {
                 InputImage.fromFilePath(context, uri)

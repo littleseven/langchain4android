@@ -65,6 +65,9 @@ class ImageTagIndexingWorker(
 
         /** 标签生成的 user prompt */
         const val TAGGING_USER_PROMPT = "请用中文标签描述这张图片的内容"
+
+        /** 分批加载未标记媒体的批量大小，避免一次性加载全部 [MediaEntity] 导致 Java Heap OOM。 */
+        private const val TAGGING_BATCH_SIZE = 50
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -123,71 +126,74 @@ class ImageTagIndexingWorker(
         val tagDao = db.tagDao()
         val tagIndexUpdater = TagIndexUpdater(tagDao)
 
-        val unlabeledMedia = dao.getUnlabeledMedia()
-        if (unlabeledMedia.isEmpty()) {
+        val unlabeledIds = dao.getUnlabeledMediaIds()
+        if (unlabeledIds.isEmpty()) {
             Logger.i(TAG, "All media already tagged")
             return
         }
 
-        Logger.i(TAG, "Found ${unlabeledMedia.size} media without AI tags")
+        Logger.i(TAG, "Found ${unlabeledIds.size} media without AI tags")
 
         var taggedCount = 0
-        for (entity in unlabeledMedia) {
-            if (currentJob?.isActive != true) {
-                Logger.i(TAG, "Tag indexing cancelled after $taggedCount items")
-                break
-            }
-
-            try {
-                val bitmap = loadBitmapForVision(entity.uri)
-                if (bitmap == null) {
-                    Logger.w(TAG, "Failed to load bitmap: ${entity.uri}")
-                    continue
+        unlabeledIds.chunked(TAGGING_BATCH_SIZE).forEach { batchIds ->
+            val batchEntities = dao.getMediaByIds(batchIds)
+            for (entity in batchEntities) {
+                if (currentJob?.isActive != true) {
+                    Logger.i(TAG, "Tag indexing cancelled after $taggedCount items")
+                    return@doBatchTagging
                 }
 
-                val response = try {
-                    localLlmEngine.imageInference(
-                        bitmap = bitmap,
-                        systemPrompt = TAGGING_SYSTEM_PROMPT,
-                        userPrompt = TAGGING_USER_PROMPT,
-                        maxTokens = 64
-                    )
-                } finally {
-                    bitmap.recycle()
+                try {
+                    val bitmap = loadBitmapForVision(entity.uri)
+                    if (bitmap == null) {
+                        Logger.w(TAG, "Failed to load bitmap: ${entity.uri}")
+                        continue
+                    }
+
+                    val response = try {
+                        localLlmEngine.imageInference(
+                            bitmap = bitmap,
+                            systemPrompt = TAGGING_SYSTEM_PROMPT,
+                            userPrompt = TAGGING_USER_PROMPT,
+                            maxTokens = 64
+                        )
+                    } finally {
+                        bitmap.recycle()
+                    }
+
+                    if (response.isBlank()) {
+                        Logger.w(TAG, "Empty response for media ${entity.id}")
+                        continue
+                    }
+
+                    Logger.i(TAG, "识别结果 [media ${entity.id}]: $response")
+
+                    // 解析标签: "猫, 户外, 阳光, 草地" → ["猫","户外","阳光","草地"]
+                    val labels = parseLabels(response)
+                    if (labels.isEmpty()) {
+                        Logger.d(TAG, "No valid labels parsed from response")
+                        continue
+                    }
+
+                    // 写入规范化标签表
+                    val labelsJson = JSONArray(labels.toList()).toString()
+                    tagIndexUpdater.updateIndex(entity.id, labelsJson)
+
+                    // 同时更新 MediaEntity.labels（兼容旧 LIKE 搜索）
+                    dao.updateLabels(entity.id, labelsJson)
+
+                    taggedCount++
+                    Logger.d(TAG, "Tagged media ${entity.id}: $labels (${taggedCount}/${unlabeledIds.size})")
+
+                    // 节流，防止连续推理导致过热
+                    delay(THROTTLE_MS)
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to tag media ${entity.id}: ${e.message}")
                 }
-
-                if (response.isBlank()) {
-                    Logger.w(TAG, "Empty response for media ${entity.id}")
-                    continue
-                }
-
-                Logger.i(TAG, "识别结果 [media ${entity.id}]: $response")
-
-                // 解析标签: "猫, 户外, 阳光, 草地" → ["猫","户外","阳光","草地"]
-                val labels = parseLabels(response)
-                if (labels.isEmpty()) {
-                    Logger.d(TAG, "No valid labels parsed from response")
-                    continue
-                }
-
-                // 写入规范化标签表
-                val labelsJson = JSONArray(labels.toList()).toString()
-                tagIndexUpdater.updateIndex(entity.id, labelsJson)
-
-                // 同时更新 MediaEntity.labels（兼容旧 LIKE 搜索）
-                dao.updateLabels(entity.id, labelsJson)
-
-                taggedCount++
-                Logger.d(TAG, "Tagged media ${entity.id}: $labels (${taggedCount}/${unlabeledMedia.size})")
-
-                // 节流，防止连续推理导致过热
-                delay(THROTTLE_MS)
-            } catch (e: Exception) {
-                Logger.w(TAG, "Failed to tag media ${entity.id}: ${e.message}")
             }
         }
 
-        Logger.i(TAG, "Tag indexing done: $taggedCount/${unlabeledMedia.size} tagged")
+        Logger.i(TAG, "Tag indexing done: $taggedCount/${unlabeledIds.size} tagged")
     }
 
     /**

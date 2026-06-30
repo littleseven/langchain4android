@@ -64,8 +64,17 @@ interface MediaDao {
     suspend fun searchAll(query: String): List<MediaEntity>
 
     /** 获取未索引的媒体（indexed_at IS NULL） */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getUnindexedMediaIds()")
     @Query("SELECT * FROM media_assets WHERE indexedAt IS NULL ORDER BY captureDate DESC")
     suspend fun getUnindexedMedia(): List<MediaEntity>
+
+    /** 仅获取未索引的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE indexedAt IS NULL ORDER BY captureDate DESC")
+    suspend fun getUnindexedMediaIds(): List<Long>
+
+    /** 按 URI 查找媒体（避免加载全表） */
+    @Query("SELECT * FROM media_assets WHERE uri = :uri LIMIT 1")
+    suspend fun getMediaByUri(uri: String): MediaEntity?
 
     /** 更新索引结果 */
     @Query(
@@ -101,24 +110,43 @@ interface MediaDao {
     // ── 人脸聚类查询 ──────────────────────────────────────────
 
     /** 获取所有媒体（非 Flow，用于后台） */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getAllMediaIds() 或分页查询")
     @Query("SELECT * FROM media_assets ORDER BY captureDate DESC")
     suspend fun getAllMediaNow(): List<MediaEntity>
+
+    /** 仅获取所有媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets ORDER BY captureDate DESC")
+    suspend fun getAllMediaIds(): List<Long>
 
     /** 更新 hasFace */
     @Query("UPDATE media_assets SET hasFace = :hasFace WHERE id = :mediaId")
     suspend fun updateHasFace(mediaId: Long, hasFace: Boolean)
 
     /** 获取有脸但未聚类的媒体 */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getMediaWithFacesIds()")
     @Query("SELECT * FROM media_assets WHERE hasFace = 1 AND (faceId IS NULL OR faceId = '') ORDER BY captureDate DESC")
     suspend fun getMediaWithFaces(): List<MediaEntity>
+
+    /** 仅获取有脸但未聚类的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE hasFace = 1 AND (faceId IS NULL OR faceId = '') ORDER BY captureDate DESC")
+    suspend fun getMediaWithFacesIds(): List<Long>
 
     /** 更新 faceId */
     @Query("UPDATE media_assets SET faceId = :faceId WHERE id = :mediaId")
     suspend fun updateFaceId(mediaId: Long, faceId: String)
 
     /** 按 hasFace 搜索 */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getHasFaceCount() / getHasFaceIds()")
     @Query("SELECT * FROM media_assets WHERE hasFace = 1 ORDER BY captureDate DESC")
     suspend fun searchByHasFace(): List<MediaEntity>
+
+    /** 有脸的媒体数量 */
+    @Query("SELECT COUNT(*) FROM media_assets WHERE hasFace = 1")
+    suspend fun getHasFaceCount(): Int
+
+    /** 仅获取有脸的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE hasFace = 1 ORDER BY captureDate DESC")
+    suspend fun getHasFaceIds(): List<Long>
 
     /** 按 faceId 分组统计数据 */
     @Query("SELECT faceId, COUNT(*) as cnt FROM media_assets WHERE faceId IS NOT NULL AND faceId != '' GROUP BY faceId ORDER BY cnt DESC")
@@ -140,8 +168,17 @@ interface MediaDao {
     suspend fun resetAllFaceIds()
 
     /** 获取未标记 AI 标签的媒体 */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getUnlabeledMediaIds() / getUnlabeledMediaCount()")
     @Query("SELECT * FROM media_assets WHERE labels IS NULL OR labels = '' ORDER BY captureDate DESC")
     suspend fun getUnlabeledMedia(): List<MediaEntity>
+
+    /** 仅获取未标记 AI 标签的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE labels IS NULL OR labels = '' ORDER BY captureDate DESC")
+    suspend fun getUnlabeledMediaIds(): List<Long>
+
+    /** 未标记 AI 标签的媒体数量 */
+    @Query("SELECT COUNT(*) FROM media_assets WHERE labels IS NULL OR labels = ''")
+    suspend fun getUnlabeledMediaCount(): Int
 
     /** 更新媒体的 AI 标签 */
     @Query("UPDATE media_assets SET labels = :labels WHERE id = :mediaId")
@@ -154,12 +191,26 @@ interface MediaDao {
     // ── 人脸 ROI 结果持久化（3-Pass 混合管道）──────────────────
 
     /** 获取未检测人脸 ROI 的媒体 */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getMediaWithoutFaceRoiIds() / getMediaWithoutFaceRoiCount()")
     @Query("SELECT * FROM media_assets WHERE faceRoiResult IS NULL ORDER BY captureDate DESC")
     suspend fun getMediaWithoutFaceRoi(): List<MediaEntity>
 
+    /** 仅获取未检测人脸 ROI 的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE faceRoiResult IS NULL ORDER BY captureDate DESC")
+    suspend fun getMediaWithoutFaceRoiIds(): List<Long>
+
+    /** 未检测人脸 ROI 的媒体数量 */
+    @Query("SELECT COUNT(*) FROM media_assets WHERE faceRoiResult IS NULL")
+    suspend fun getMediaWithoutFaceRoiCount(): Int
+
     /** 获取已检测人脸 ROI 但未生成标签的媒体 */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getMediaWithFaceRoiWithoutLabelsIds()")
     @Query("SELECT * FROM media_assets WHERE faceRoiResult IS NOT NULL AND (labels IS NULL OR labels = '') ORDER BY captureDate DESC")
     suspend fun getMediaWithFaceRoiWithoutLabels(): List<MediaEntity>
+
+    /** 仅获取已检测人脸 ROI 但未生成标签的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE faceRoiResult IS NOT NULL AND (labels IS NULL OR labels = '') ORDER BY captureDate DESC")
+    suspend fun getMediaWithFaceRoiWithoutLabelsIds(): List<Long>
 
     /** 更新人脸 ROI 检测结果 */
     @Query("UPDATE media_assets SET faceRoiResult = :json, hasFace = :hasFace WHERE id = :mediaId")
@@ -180,16 +231,30 @@ interface MediaDao {
     suspend fun updateSemanticEmbedding(mediaId: Long, embedding: String)
 
     /** 获取未编码语义 embedding 的媒体（已有 labels 但无 semanticEmbedding）。用于单独重编码场景。 */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getMediaNeedingSemanticEncodingIds()")
     @Query("SELECT * FROM media_assets WHERE labels IS NOT NULL AND labels != '' AND semanticEmbedding IS NULL ORDER BY captureDate DESC")
     suspend fun getMediaNeedingSemanticEncoding(): List<MediaEntity>
+
+    /** 仅获取未编码语义 embedding 的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE labels IS NOT NULL AND labels != '' AND semanticEmbedding IS NULL ORDER BY captureDate DESC")
+    suspend fun getMediaNeedingSemanticEncodingIds(): List<Long>
 
     /** 获取指定 ID 的语义 embedding */
     @Query("SELECT semanticEmbedding FROM media_assets WHERE id = :mediaId")
     suspend fun getSemanticEmbedding(mediaId: Long): String?
 
     /** 获取所有有语义 embedding 的媒体 */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getMediaWithSemanticEmbeddingIds() / getMediaWithSemanticEmbeddingCount()")
     @Query("SELECT * FROM media_assets WHERE semanticEmbedding IS NOT NULL AND semanticEmbedding != '' ORDER BY captureDate DESC")
     suspend fun getMediaWithSemanticEmbedding(): List<MediaEntity>
+
+    /** 仅获取有语义 embedding 的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE semanticEmbedding IS NOT NULL AND semanticEmbedding != '' ORDER BY captureDate DESC")
+    suspend fun getMediaWithSemanticEmbeddingIds(): List<Long>
+
+    /** 有语义 embedding 的媒体数量 */
+    @Query("SELECT COUNT(*) FROM media_assets WHERE semanticEmbedding IS NOT NULL AND semanticEmbedding != ''")
+    suspend fun getMediaWithSemanticEmbeddingCount(): Int
 
     /** 检查是否有待语义编码的媒体（用于单独重编码场景） */
     @Query("SELECT COUNT(*) > 0 FROM media_assets WHERE labels IS NOT NULL AND labels != '' AND semanticEmbedding IS NULL")

@@ -8,8 +8,6 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.mamba.picme.data.download.ModelPathConfig
 import java.io.File
-import java.nio.FloatBuffer
-import java.nio.LongBuffer
 
 /**
  * MobileCLIP ONNX Runtime 后端（MobileCLIP-S2 fp16）
@@ -105,10 +103,14 @@ class MobileClipOnnxBackend(
         return try {
             val inputArray = preprocessImage(bitmap)
             val tensor = OnnxTensor.createTensor(env, inputArray)
-            val inputs = mapOf(VISION_INPUT_NAME to tensor)
-            session.run(inputs).use { results ->
-                val output = results.get(0).value as Array<FloatArray>
-                validateAndNormalize(output[0].clone(), "encodeImage")
+            try {
+                val inputs = mapOf(VISION_INPUT_NAME to tensor)
+                session.run(inputs).use { results ->
+                    val output = results.get(0).value as Array<FloatArray>
+                    validateAndNormalize(output[0].clone(), "encodeImage")
+                }
+            } finally {
+                tensor.close()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to encode image", e)
@@ -125,10 +127,14 @@ class MobileClipOnnxBackend(
         return try {
             val inputArray = Array(1) { tokenIds }
             val tensor = OnnxTensor.createTensor(env, inputArray)
-            val inputs = mapOf(TEXT_INPUT_NAME to tensor)
-            session.run(inputs).use { results ->
-                val output = results.get(0).value as Array<FloatArray>
-                validateAndNormalize(output[0].clone(), "encodeText")
+            try {
+                val inputs = mapOf(TEXT_INPUT_NAME to tensor)
+                session.run(inputs).use { results ->
+                    val output = results.get(0).value as Array<FloatArray>
+                    validateAndNormalize(output[0].clone(), "encodeText")
+                }
+            } finally {
+                tensor.close()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to encode text", e)
@@ -141,8 +147,9 @@ class MobileClipOnnxBackend(
         textSession?.close()
         visionSession = null
         textSession = null
-        env.close()
-        Log.i(TAG, "MobileClipOnnxBackend released")
+        // 注意：OrtEnvironment 是进程级单例，与 ASR/KWS/翻译等 ONNX Runtime 会话共享。
+        // 关闭它会杀死应用内所有其他 ONNX Runtime session，因此这里只关闭 session，不关闭 env。
+        Log.i(TAG, "MobileClipOnnxBackend sessions released (OrtEnvironment kept alive)")
     }
 
     /**

@@ -335,238 +335,212 @@ fun TagGenerationControlScreen(
                         }
 
                         Spacer(Modifier.height(8.dp))
-                        HorizontalDivider()
-                        Spacer(Modifier.height(8.dp))
-
-                        // ── 分阶段独立控制 ────────────────
-                        Text(
-                            "分阶段执行",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Spacer(Modifier.height(8.dp))
-
-                        PassControlCard(
-                            title = "Pass 1：人脸检测 + MobileCLIP 语义编码",
-                            subtitle = "RetinaFace + MobileCLIP-S2：检测人脸并提取语义向量",
-                            onIncremental = {
-                                refreshStats()
-                                context.startForegroundService(TagGenerationService.intentScanPass1(context))
-                            },
-                            onFull = {
-                                refreshStats()
-                                context.startForegroundService(TagGenerationService.intentScanPass1Full(context))
-                            }
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        PassControlCard(
-                            title = "Pass 2：DBSCAN 人脸聚类",
-                            subtitle = "基于全量人脸 Embedding 进行全局聚类",
-                            onIncremental = {
-                                refreshStats()
-                                context.startForegroundService(TagGenerationService.intentScanPass2(context))
-                            },
-                            onFull = {
-                                refreshStats()
-                                context.startForegroundService(TagGenerationService.intentScanPass2Full(context))
-                            }
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        PassControlCard(
-                            title = "Pass 3：Qwen 图像理解标签",
-                            subtitle = "Qwen3.5-2B：生成场景、物体、活动、摘要等标签",
-                            onIncremental = {
-                                refreshStats()
-                                context.startForegroundService(TagGenerationService.intentScanPass3(context))
-                            },
-                            onFull = {
-                                refreshStats()
-                                context.startForegroundService(TagGenerationService.intentScanPass3Full(context))
-                            }
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-                        HorizontalDivider()
-                        Spacer(Modifier.height(8.dp))
-
-                        // ── MobileCLIP 语义编码单独重编码（兼容/高级） ──────────
-                        Text(
-                            "MobileCLIP 语义编码单独重编码",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "仅重新生成语义向量，不影响人脸检测与标签结果。常规扫描已内联合并到 Pass 1。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Spacer(Modifier.height(8.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    refreshStats()
-                                    context.startForegroundService(TagGenerationService.intentScanPass4(context))
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("增量生成")
-                            }
-                            Button(
-                                onClick = {
-                                    refreshStats()
-                                    context.startForegroundService(TagGenerationService.intentScanPass4Full(context))
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiary
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("全部重新生成")
-                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        HorizontalDivider()
-                        Spacer(Modifier.height(8.dp))
-
-                        // ── 精细控制：按类别 / 时间范围重新生成 ──────────
-                        Text(
-                            "精细控制",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            "选择 TAG 类别",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            CategoryChip(
-                                label = "人脸",
-                                selected = TagCategory.FACE in selectedCategories,
-                                onClick = {
-                                    selectedCategories = selectedCategories.toggle(TagCategory.FACE)
-                                }
-                            )
-                            CategoryChip(
-                                label = "场景",
-                                selected = TagCategory.SCENE in selectedCategories,
-                                onClick = {
-                                    selectedCategories = selectedCategories.toggle(TagCategory.SCENE)
-                                }
-                            )
-                            CategoryChip(
-                                label = "活动",
-                                selected = TagCategory.ACTIVITY in selectedCategories,
-                                onClick = {
-                                    selectedCategories = selectedCategories.toggle(TagCategory.ACTIVITY)
-                                }
-                            )
-                            CategoryChip(
-                                label = "物体",
-                                selected = TagCategory.OBJECTS in selectedCategories,
-                                onClick = {
-                                    selectedCategories = selectedCategories.toggle(TagCategory.OBJECTS)
-                                }
-                            )
-                            CategoryChip(
-                                label = "标签",
-                                selected = TagCategory.TAGS in selectedCategories,
-                                onClick = {
-                                    selectedCategories = selectedCategories.toggle(TagCategory.TAGS)
-                                }
-                            )
-                            CategoryChip(
-                                label = "摘要",
-                                selected = TagCategory.SUMMARY in selectedCategories,
-                                onClick = {
-                                    selectedCategories = selectedCategories.toggle(TagCategory.SUMMARY)
-                                }
-                            )
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            "时间范围",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            TimeRangePreset.entries.forEach { preset ->
-                                CategoryChip(
-                                    label = preset.label,
-                                    selected = selectedTimeRange == preset,
-                                    onClick = { selectedTimeRange = preset }
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                "模式: ${if (fullRegenerateMode) "全量重标" else "仅补充缺失"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                            )
-                            Switch(
-                                checked = fullRegenerateMode,
-                                onCheckedChange = { fullRegenerateMode = it }
-                            )
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Button(
-                            onClick = {
-                                refreshStats()
-                                val categories = selectedCategories.ifEmpty { TagCategory.ALL }
-                                val startTimeMs = selectedTimeRange.startTimeMs
-                                context.startForegroundService(
-                                    TagGenerationService.intentRegenerateCategories(
-                                        context = context,
-                                        categories = categories.map { it.name },
-                                        startTimeMs = startTimeMs,
-                                        fullMode = fullRegenerateMode
-                                    )
-                                )
-                            },
-                            enabled = selectedCategories.isNotEmpty() || selectedTimeRange != TimeRangePreset.ALL,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Rounded.Tune, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("按选择重新生成")
-                        }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(16.dp))
+                // ── 分阶段独立控制 ────────────────
+                Text(
+                    "分阶段独立控制",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "每个阶段均可独立增量补充或全量重新生成",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(Modifier.height(8.dp))
+
+                PassControlCard(
+                    title = "人脸检测",
+                    subtitle = "RetinaFace 检测人脸 ROI：$withFace / $totalMedia 张 · 剩余 $remainingPass1 张",
+                    onIncremental = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPass1(context))
+                    },
+                    onFull = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPass1Full(context))
+                    }
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                PassControlCard(
+                    title = "人脸聚类",
+                    subtitle = "DBSCAN 全局聚类：$personCount 个人物簇 · $embeddingCount 条 embedding",
+                    onIncremental = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPass2(context))
+                    },
+                    onFull = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPass2Full(context))
+                    }
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                PassControlCard(
+                    title = "Qwen 图像理解标签",
+                    subtitle = "生成场景、物体、活动、摘要等标签：$withLabels / $totalMedia 张 · 剩余 $remainingPass3 张",
+                    onIncremental = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPass3(context))
+                    },
+                    onFull = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPass3Full(context))
+                    }
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                PassControlCard(
+                    title = "MobileCLIP 语义编码",
+                    subtitle = "单独重新生成语义向量：$withSemantic / $totalMedia 张。常规扫描已内联合并到「人脸检测」阶段",
+                    onIncremental = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPass4(context))
+                    },
+                    onFull = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPass4Full(context))
+                    }
+                )
+
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+
+                // ── 精细控制：按类别 / 时间范围重新生成 ──────────
+                Text(
+                    "精细控制",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    "选择 TAG 类别",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+                Spacer(Modifier.height(4.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    CategoryChip(
+                        label = "人脸",
+                        selected = TagCategory.FACE in selectedCategories,
+                        onClick = {
+                            selectedCategories = selectedCategories.toggle(TagCategory.FACE)
+                        }
+                    )
+                    CategoryChip(
+                        label = "场景",
+                        selected = TagCategory.SCENE in selectedCategories,
+                        onClick = {
+                            selectedCategories = selectedCategories.toggle(TagCategory.SCENE)
+                        }
+                    )
+                    CategoryChip(
+                        label = "活动",
+                        selected = TagCategory.ACTIVITY in selectedCategories,
+                        onClick = {
+                            selectedCategories = selectedCategories.toggle(TagCategory.ACTIVITY)
+                        }
+                    )
+                    CategoryChip(
+                        label = "物体",
+                        selected = TagCategory.OBJECTS in selectedCategories,
+                        onClick = {
+                            selectedCategories = selectedCategories.toggle(TagCategory.OBJECTS)
+                        }
+                    )
+                    CategoryChip(
+                        label = "标签",
+                        selected = TagCategory.TAGS in selectedCategories,
+                        onClick = {
+                            selectedCategories = selectedCategories.toggle(TagCategory.TAGS)
+                        }
+                    )
+                    CategoryChip(
+                        label = "摘要",
+                        selected = TagCategory.SUMMARY in selectedCategories,
+                        onClick = {
+                            selectedCategories = selectedCategories.toggle(TagCategory.SUMMARY)
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    "时间范围",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+                Spacer(Modifier.height(4.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TimeRangePreset.entries.forEach { preset ->
+                        CategoryChip(
+                            label = preset.label,
+                            selected = selectedTimeRange == preset,
+                            onClick = { selectedTimeRange = preset }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "模式: ${if (fullRegenerateMode) "全量重标" else "仅补充缺失"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    )
+                    Switch(
+                        checked = fullRegenerateMode,
+                        onCheckedChange = { fullRegenerateMode = it }
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        refreshStats()
+                        val categories = selectedCategories.ifEmpty { TagCategory.ALL }
+                        val startTimeMs = selectedTimeRange.startTimeMs
+                        context.startForegroundService(
+                            TagGenerationService.intentRegenerateCategories(
+                                context = context,
+                                categories = categories.map { it.name },
+                                startTimeMs = startTimeMs,
+                                fullMode = fullRegenerateMode
+                            )
+                        )
+                    },
+                    enabled = selectedCategories.isNotEmpty() || selectedTimeRange != TimeRangePreset.ALL,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Rounded.Tune, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("按选择重新生成")
+                }
+            }
         }
+
+        Spacer(Modifier.height(16.dp))
     }
 }
 

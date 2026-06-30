@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -60,6 +61,9 @@ class TagScanOrchestrator(
         /** 失败重试退避基数 */
         private const val RETRY_BACKOFF_BASE_MS = 5 * 60 * 1000L
 
+        /** 查询过滤时分批加载 MediaEntity 的批量大小，防止 Java Heap OOM */
+        private const val QUERY_FILTER_BATCH_SIZE = 100
+
         /**
          * 判断最近一次扫描覆盖的 Pass 是否包含所有请求的 Pass
          */
@@ -90,19 +94,23 @@ class TagScanOrchestrator(
          * 不依赖 [TagScanOrchestrator] 实例，供 UI/Service 直接使用，确保口径一致。
          * - [remainingForPass1]：尚未进行人脸检测/MobileCLIP 编码的媒体数
          * - [remainingForPass3]：尚未生成 Qwen 标签的媒体数（不强制要求已有 faceRoiResult，与 Pass 1 解耦）
+         *
+         * 注意：所有统计均使用 COUNT 查询并在 IO 调度器执行，避免一次性加载大量 [MediaEntity]
+         * 到 Java Heap 导致 OOM（MediaEntity 包含 faceRoiResult/semanticEmbedding 等大字段）。
          */
-        suspend fun getDbStats(db: AppDatabase): TagScanDbStats {
+        suspend fun getDbStats(db: AppDatabase): TagScanDbStats = withContext(Dispatchers.IO) {
             val totalMedia = db.mediaDao().getTotalCount()
-            val withFace = db.mediaDao().searchByHasFace().size
-            val withSemantic = db.mediaDao().getMediaWithSemanticEmbedding().size
-            val withLabels = totalMedia - db.mediaDao().getUnlabeledMedia().size
+            val withFace = db.mediaDao().getHasFaceCount()
+            val withSemantic = db.mediaDao().getMediaWithSemanticEmbeddingCount()
+            val unlabeledCount = db.mediaDao().getUnlabeledMediaCount()
+            val withLabels = totalMedia - unlabeledCount
             val personCount = db.personDao().getAllPersons().size
             val faceEmbeddingCount = db.personDao().getAllEmbeddingCount()
-            val remainingForPass1 = db.mediaDao().getMediaWithoutFaceRoi().size
+            val remainingForPass1 = db.mediaDao().getMediaWithoutFaceRoiCount()
             // Pass 3 剩余独立统计：所有无 labels 的媒体，不强制要求已有 faceRoiResult
-            val remainingForPass3 = db.mediaDao().getUnlabeledMedia().size
+            val remainingForPass3 = unlabeledCount
 
-            return TagScanDbStats(
+            TagScanDbStats(
                 totalMedia = totalMedia,
                 withFace = withFace,
                 withLabels = withLabels,
@@ -226,6 +234,9 @@ class TagScanOrchestrator(
 
     /**
      * 按查询条件批量生成 / 重生成
+     *
+     * 实现注意：为避免一次性加载全部 [MediaEntity]（含大字段 faceRoiResult/semanticEmbedding）
+     * 导致 Java Heap OOM，先加载所有 ID，再分批加载实体进行过滤。
      */
     suspend fun scheduleRegenerateByQuery(
         query: TagScanQuery,
@@ -235,22 +246,19 @@ class TagScanOrchestrator(
         val sessionId = newSessionId()
         logInfo(sessionId, "scheduleRegenerateByQuery: $query, categories=$categories, mode=$mode")
 
-        val allMedia = db.mediaDao().getAllMediaNow()
-        val filtered = allMedia.filter { entity ->
-            query.mediaIds?.let { entity.id in it } ?: true
-        }.filter { entity ->
-            query.startTimeMs?.let { entity.captureDate >= it } ?: true
-        }.filter { entity ->
-            query.endTimeMs?.let { entity.captureDate <= it } ?: true
-        }.filter { entity ->
-            query.hasFace?.let { entity.hasFace == it } ?: true
-        }.filter { entity ->
-            if (query.missingAnyCategory.isNullOrEmpty()) true
-            else !hasAllCategories(entity.labels, query.missingAnyCategory)
+        val allIds = db.mediaDao().getAllMediaIds()
+        val filteredIds = filterMediaIdsByQuery(allIds, query)
+
+        if (filteredIds.isEmpty()) {
+            _progress.value = TagScanSessionProgress(
+                sessionId = sessionId,
+                state = ScanSessionState.COMPLETED,
+                messages = listOf(ScanMessage(level = MessageLevel.INFO, text = "没有需要处理的媒体"))
+            )
+            return sessionId
         }
 
-        val ids = filtered.map { it.id }
-        return scheduleRegenerate(ids, categories, mode)
+        return scheduleRegenerate(filteredIds, categories, mode)
     }
 
     /**
@@ -264,6 +272,9 @@ class TagScanOrchestrator(
      *
      * ## 全量模式行为（FULL）
      * - 清空对应阶段旧数据后全量重跑
+     *
+     * 实现注意：为避免一次性加载全部 [MediaEntity] 导致 Java Heap OOM，先加载所有 ID，
+     * 再分批加载实体进行过滤。
      */
     suspend fun schedulePass(
         pass: TagScanPass,
@@ -274,18 +285,8 @@ class TagScanOrchestrator(
         val sessionId = newSessionId()
         logInfo(sessionId, "schedulePass: $pass, mode=$mode")
 
-        val allMedia = db.mediaDao().getAllMediaNow()
-        val filtered = allMedia.filter { entity ->
-            query.mediaIds?.let { entity.id in it } ?: true
-        }.filter { entity ->
-            query.startTimeMs?.let { entity.captureDate >= it } ?: true
-        }.filter { entity ->
-            query.endTimeMs?.let { entity.captureDate <= it } ?: true
-        }.filter { entity ->
-            query.hasFace?.let { entity.hasFace == it } ?: true
-        }
-
-        var ids = filtered.map { it.id }
+        val allIds = db.mediaDao().getAllMediaIds()
+        var ids = filterMediaIdsByQuery(allIds, query)
 
         if (pass == TagScanPass.FACE_DETECTION && mode == ScanMode.FULL) {
             // 全量重跑 Pass 1：清空旧的人脸数据
@@ -774,6 +775,36 @@ class TagScanOrchestrator(
         } catch (e: Exception) {
             mutableMapOf()
         }
+    }
+
+    /**
+     * 分批加载 [MediaEntity] 并按 [TagScanQuery] 条件过滤，返回匹配的媒体 ID 列表。
+     *
+     * 避免一次性加载全部 [MediaEntity]（含 faceRoiResult/semanticEmbedding 等大字段）到 Java Heap，
+     * 防止大图库下出现 OOM。
+     */
+    private suspend fun filterMediaIdsByQuery(
+        allIds: List<Long>,
+        query: TagScanQuery
+    ): List<Long> {
+        val result = mutableListOf<Long>()
+        allIds.chunked(QUERY_FILTER_BATCH_SIZE).forEach { batchIds ->
+            val batchEntities = db.mediaDao().getMediaByIds(batchIds)
+            val matching = batchEntities.filter { entity ->
+                query.mediaIds?.let { entity.id in it } ?: true
+            }.filter { entity ->
+                query.startTimeMs?.let { entity.captureDate >= it } ?: true
+            }.filter { entity ->
+                query.endTimeMs?.let { entity.captureDate <= it } ?: true
+            }.filter { entity ->
+                query.hasFace?.let { entity.hasFace == it } ?: true
+            }.filter { entity ->
+                if (query.missingAnyCategory.isNullOrEmpty()) true
+                else !hasAllCategories(entity.labels, query.missingAnyCategory)
+            }
+            result += matching.map { it.id }
+        }
+        return result
     }
 
     /**
