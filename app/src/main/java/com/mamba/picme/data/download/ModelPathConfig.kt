@@ -78,9 +78,16 @@ object ModelPathConfig {
 
     /**
      * 检查 MobileCLIP 模型是否完整
+     *
+     * 仅支持 ONNX Runtime 后端（MobileCLIP-S2）：
+     * - ONNX fp32: vision_model.onnx / vision_model_fp32.onnx + text_model.onnx / text_model_fp32.onnx + tokenizer.json
+     * - ONNX fp16: vision_model_fp16.onnx + text_model_fp16.onnx + tokenizer.json
      */
     fun isMobileClipModelReady(context: Context): Boolean {
-        return validateModelFiles(getMobileClipModelDir(context), MOBILECLIP_MODEL_FILES)
+        val modelDir = getMobileClipModelDir(context)
+        return validateModelFiles(modelDir, MOBILECLIP_ONNX_FP32_MODEL_FILES) ||
+            validateModelFiles(modelDir, MOBILECLIP_ONNX_FP32_ALT_MODEL_FILES) ||
+            validateModelFiles(modelDir, MOBILECLIP_ONNX_FP16_MODEL_FILES)
     }
 
     /**
@@ -114,7 +121,7 @@ object ModelPathConfig {
     const val MODEL_ID_LLM = "qwen-1.7b"
     const val MODEL_ID_ASR = "sherpa-onnx-asr-zipformer"
     const val MODEL_ID_KWS = "sherpa-onnx-kws-zipformer-wenetspeech"
-    const val MODEL_ID_MOBILECLIP = "mobileclip-mnn"
+    const val MODEL_ID_MOBILECLIP = "mobileclip-onnx"
     const val MODEL_ID_OPUS_MT = "opus-mt-zh-en"
 
     // ===== 模型文件列表 =====
@@ -154,17 +161,39 @@ object ModelPathConfig {
     )
 
     /**
-     * MobileCLIP 模型文件列表
+     * MobileCLIP ONNX fp16 模型文件列表（MobileCLIP-S2）
+     *
+     * 当前 ModelScope 远程仓库只提供 fp16 版本，优先使用。
      */
-    val MOBILECLIP_MODEL_FILES = listOf(
-        "vision_model.mnn",
-        "text_model.mnn",
-        "configuration.json",
-        "tokenizer.json",
-        "tokenizer_config.json",
-        "vocab.txt",
-        "merges.txt"
+    val MOBILECLIP_ONNX_FP16_MODEL_FILES = listOf(
+        "vision_model_fp16.onnx",
+        "text_model_fp16.onnx",
+        "tokenizer.json"
     )
+
+    /**
+     * MobileCLIP ONNX fp32 模型文件列表（MobileCLIP-S2）
+     */
+    val MOBILECLIP_ONNX_FP32_MODEL_FILES = listOf(
+        "vision_model.onnx",
+        "text_model.onnx",
+        "tokenizer.json"
+    )
+
+    /**
+     * MobileCLIP ONNX fp32 模型文件列表（带 _fp32 后缀的命名）
+     */
+    val MOBILECLIP_ONNX_FP32_ALT_MODEL_FILES = listOf(
+        "vision_model_fp32.onnx",
+        "text_model_fp32.onnx",
+        "tokenizer.json"
+    )
+
+    @Deprecated("Use MOBILECLIP_ONNX_FP16_MODEL_FILES, MOBILECLIP_ONNX_FP32_MODEL_FILES or MOBILECLIP_ONNX_FP32_ALT_MODEL_FILES")
+    val MOBILECLIP_ONNX_MODEL_FILES = MOBILECLIP_ONNX_FP32_MODEL_FILES
+
+    @Deprecated("Use MOBILECLIP_ONNX_FP16_MODEL_FILES, MOBILECLIP_ONNX_FP32_MODEL_FILES or MOBILECLIP_ONNX_FP32_ALT_MODEL_FILES")
+    val MOBILECLIP_MODEL_FILES = MOBILECLIP_ONNX_FP32_MODEL_FILES
 
     /**
      * OPUS-MT 翻译模型文件列表（ModelScope: budaoshou/OPUS-MT-Zh-En-ONNX-INT8）
@@ -238,10 +267,17 @@ object ModelPathConfig {
         sb.append("  Path: ${mobileClipDir.absolutePath}\n")
         sb.append("  Exists: ${mobileClipDir.exists()}\n")
         if (mobileClipDir.exists()) {
-            val missing = getMissingFiles(mobileClipDir, MOBILECLIP_MODEL_FILES)
-            sb.append("  Status: ${if (missing.isEmpty()) "✓ Complete" else "✗ Missing ${missing.size} files"}\n")
-            if (missing.isNotEmpty()) {
-                sb.append("  Missing: ${missing.joinToString(", ")}\n")
+            val onnxFp16Ready = validateModelFiles(mobileClipDir, MOBILECLIP_ONNX_FP16_MODEL_FILES)
+            val onnxFp32Ready = validateModelFiles(mobileClipDir, MOBILECLIP_ONNX_FP32_MODEL_FILES)
+            val onnxFp32AltReady = validateModelFiles(mobileClipDir, MOBILECLIP_ONNX_FP32_ALT_MODEL_FILES)
+            sb.append("  Status: ${if (onnxFp16Ready || onnxFp32Ready || onnxFp32AltReady) "✓ Complete" else "✗ Missing files"}\n")
+            if (!onnxFp16Ready && !onnxFp32Ready && !onnxFp32AltReady) {
+                val missingOnnxFp16 = getMissingFiles(mobileClipDir, MOBILECLIP_ONNX_FP16_MODEL_FILES)
+                val missingOnnxFp32 = getMissingFiles(mobileClipDir, MOBILECLIP_ONNX_FP32_MODEL_FILES)
+                val missingOnnxFp32Alt = getMissingFiles(mobileClipDir, MOBILECLIP_ONNX_FP32_ALT_MODEL_FILES)
+                sb.append("  Missing (ONNX fp16): ${missingOnnxFp16.joinToString(", ")}\n")
+                sb.append("  Missing (ONNX fp32): ${missingOnnxFp32.joinToString(", ")}\n")
+                sb.append("  Missing (ONNX fp32 alt): ${missingOnnxFp32Alt.joinToString(", ")}\n")
             }
         }
 

@@ -184,7 +184,7 @@ fun TagGenerationControlScreen(
                         Column(Modifier.weight(1f)) {
                             Text("Pass 1: 人脸检测 + MobileCLIP 语义编码（内联）", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "RetinaFace + MobileCLIP-S0 → $withFace / $totalMedia 张 · 有语义 $withSemantic 张",
+                                "RetinaFace + MobileCLIP-S2 → $withFace / $totalMedia 张 · 有语义 $withSemantic 张",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -348,7 +348,7 @@ fun TagGenerationControlScreen(
 
                         PassControlCard(
                             title = "Pass 1：人脸检测 + MobileCLIP 语义编码",
-                            subtitle = "RetinaFace + MobileCLIP-S0：检测人脸并提取语义向量",
+                            subtitle = "RetinaFace + MobileCLIP-S2：检测人脸并提取语义向量",
                             onIncremental = {
                                 refreshStats()
                                 context.startForegroundService(TagGenerationService.intentScanPass1(context))

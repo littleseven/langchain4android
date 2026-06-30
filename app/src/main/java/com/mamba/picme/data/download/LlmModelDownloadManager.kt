@@ -118,16 +118,14 @@ class LlmModelDownloadManager(context: Context) {
         private val FACE_DETECTION_ROI_500M_NCNN_FILES = listOf("det_500m.param", "det_500m.bin")
         
         /**
-         * MobileCLIP 模型文件列表
+         * MobileCLIP ONNX fp32 模型文件列表（MobileCLIP-S2）
+         *
+         * fp16 版本在 ONNX Runtime Android CPU 上会出现 NaN/Inf 输出，因此使用 fp32。
          */
         private val MOBILECLIP_MODEL_FILES = listOf(
-            "vision_model.mnn",
-            "text_model.mnn",
-            "configuration.json",
-            "tokenizer.json",
-            "tokenizer_config.json",
-            "vocab.txt",
-            "merges.txt"
+            "vision_model.onnx",
+            "text_model.onnx",
+            "tokenizer.json"
         )
 
         /**
@@ -483,7 +481,7 @@ fun isModelDownloaded(modelId: String): Boolean {
             modelId == "picme-face-det-500m-ncnn" -> FACE_DETECTION_ROI_500M_NCNN_FILES
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
             modelId == "picme-face-embedding-mnn" -> FACE_EMBEDDING_MNN_FILES
-            modelId == "mobileclip-mnn" -> MOBILECLIP_MODEL_FILES
+            modelId == "mobileclip-onnx" -> MOBILECLIP_MODEL_FILES
             modelId == "opus-mt-zh-en" -> ModelPathConfig.OPUS_MT_MODEL_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
@@ -506,7 +504,7 @@ fun isModelDownloaded(modelId: String): Boolean {
             modelId == "picme-face-det-500m-mnn" -> FACE_DETECTION_ROI_500M_MNN_FILES
             modelId == "picme-face-det-500m-ncnn" -> FACE_DETECTION_ROI_500M_NCNN_FILES
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
-            modelId == "mobileclip-mnn" -> MOBILECLIP_MODEL_FILES
+            modelId == "mobileclip-onnx" -> MOBILECLIP_MODEL_FILES
             modelId == "opus-mt-zh-en" -> ModelPathConfig.OPUS_MT_MODEL_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
@@ -1304,7 +1302,7 @@ data class ModelConfig(
             "picme-face-det-500m-mnn",  // MNN ROI (Det500M)
             "picme-face-landmark-mnn",  // MNN 2D106
             "picme-face-embedding-mnn", // MNN MobileFaceNet
-            "mobileclip-mnn",           // 语义搜索/相册打标
+            "mobileclip-onnx",          // 语义搜索/相册打标
             "opus-mt-zh-en"             // 中文查询翻译
         )
     }

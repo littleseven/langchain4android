@@ -181,12 +181,16 @@ data class FaceRoiPersist(
 
 /**
  * [Pass 1] 单张照片的人脸检测 + Embedding 提取结果
+ *
+ * 内联合成 MobileCLIP 语义 embedding，避免 Pass 1 和 MobileCLIP 阶段重复解码同一张图。
  */
 data class Stage1WithEmbeddingsResult(
     /** faceRoi JSON（null = 解码失败；非 null = 已处理，可能无人脸） */
     val faceRoiJson: String?,
     /** 每张人脸的 512 维 embedding */
-    val embeddings: List<FloatArray>
+    val embeddings: List<FloatArray>,
+    /** MobileCLIP 语义 embedding Base64（null = 编码失败） */
+    val semanticEmbedding: String? = null
 )
 
 /**

@@ -229,12 +229,12 @@ ChatScreen(
 
 ## 8. 语音输入集成
 
-`ChatInputBar` 支持语音输入模式切换：
-
-- **文字模式**：底部输入栏，支持键盘输入
-- **语音模式**：按住麦克风按钮说话（Push-to-Talk），或开启 WakeWord 自动监听
-
-语音输入通过 `VoiceCommandCoordinator` 处理，识别结果以 `AgentMessage.UserText` 形式进入消息列表。
+- **Camera/Gallery 浮动面板 (`AiChatScreen`)**：通过 `VoiceCommandCoordinator` 处理，识别结果以 `AgentMessage.UserText` 形式进入消息列表。
+- **独立 Chat 页 (`ChatScreen`)**：`ChatInputArea` 提供文字/语音模式切换。语音模式使用 `PushToTalkEngine` 直接驱动 ASR：
+  - 已配置本地 Sherpa-ONNX ASR 模型且文件就绪时，使用本地识别
+  - 未配置或本地模型不可用时回退到 `SystemAsrEngine`
+  - 按住按钮时请求 `RECORD_AUDIO` 运行时权限，权限拒绝时提示用户
+  - 识别结果通过 `ChatViewModel.sendMessage()` 进入当前会话
 
 ## 9. Agent 执行规约 (Execution Rules)
 

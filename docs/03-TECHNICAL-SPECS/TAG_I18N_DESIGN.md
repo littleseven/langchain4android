@@ -162,7 +162,7 @@ interface TagPromptProvider {
 | `AutoTagCapability` | 命令描述移入 `strings.xml`，通过 `Context` 读取 |
 | `MediaSearchEngine.buildLlmSearchPrompt` | 按 `AppLanguage` 返回中英文 prompt |
 | `QueryParser` | 停用词、城市词、人物词按 locale 加载或从资源读取 |
-| `MediaSearchEngine.PEOPLE_SEARCH_KEYWORDS` | 已含英文，保持并扩展 |
+| `MediaSearchEngine` | 已移除 SQL 标签未命中时的 `hasFace` 人物回退，人物搜索完全依赖 MobileCLIP 语义召回 |
 
 ---
 

@@ -661,17 +661,14 @@ class TagGenerationScheduler(
             )
         }
 
-        // MobileCLIP 语义编码已内联合并到 Pass 1：在同一次任务中执行
-        try {
-            val semanticEmbedding = pipeline.stage4MobileClipEncoding(
-                uri = entity.uri,
-                mediaId = entity.id
-            )
-            if (semanticEmbedding != null) {
+        // MobileCLIP 语义编码已在 stage1WithEmbeddings 中复用 faceBitmap 完成
+        val semanticEmbedding = result.semanticEmbedding
+        if (semanticEmbedding != null) {
+            try {
                 dao.updateSemanticEmbedding(entity.id, semanticEmbedding)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to persist semantic embedding for media ${entity.id}: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "MobileCLIP encoding (inline in Pass 1) failed for media ${entity.id}: ${e.message}")
         }
 
         delay(getThrottleMs())

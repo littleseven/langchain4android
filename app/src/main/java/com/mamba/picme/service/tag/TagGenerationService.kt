@@ -391,21 +391,25 @@ class TagGenerationService : Service() {
     /**
      * 自适应节流间隔：根据设备热状态分级
      *
-     * - SEVERE:  30s（触发 ABORT，此值不使用）
-     * - MODERATE: 10s（严重发热，大幅降低推理频率）
-     * - LIGHT:    3s（轻微发热，适度降低）
-     * - NONE:     1s（正常状态，原 500ms 对 CPU 推理过短）
+     * MobileCLIP 已启用 GPU 加速且复用 Bitmap，单张处理耗时降至 ~100-300ms，
+     * 原 1s 节流成为吞吐瓶颈。新分级在凉机/微热时大幅缩短间隔，
+     * 严重发热时仍通过 guard 触发 ABORT/PAUSE 保护设备。
+     *
+     * - SEVERE:   由 checkGuard() 直接 ABORT，不使用此值
+     * - MODERATE: 3s（严重发热，大幅降低推理频率）
+     * - LIGHT:    300ms（轻微发热，适度降低）
+     * - NONE:     50ms（正常状态，GPU 推理可承受高吞吐）
      */
     private fun getAdaptiveThrottleMs(): Long {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val pm = getSystemService(PowerManager::class.java)
             return when (pm.currentThermalStatus) {
-                PowerManager.THERMAL_STATUS_MODERATE -> 10_000L
-                PowerManager.THERMAL_STATUS_LIGHT -> 3_000L
-                else -> 1_000L
+                PowerManager.THERMAL_STATUS_MODERATE -> 3_000L
+                PowerManager.THERMAL_STATUS_LIGHT -> 300L
+                else -> 50L
             }
         }
-        return 1_000L
+        return 50L
     }
 
     private fun checkGuard(): TagGenerationScheduler.GuardResult {

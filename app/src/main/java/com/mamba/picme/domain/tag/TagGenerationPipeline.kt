@@ -183,8 +183,16 @@ class TagGenerationPipeline(
                 }
             }
 
-            Log.d(TAG, "[Pass 1] Extracted ${embeddings.size} valid embeddings for mediaId=$mediaId")
-            return Stage1WithEmbeddingsResult(faceRoiJson, embeddings)
+            // 复用同一张 faceBitmap 做 MobileCLIP 语义编码，避免二次解码图片
+            val semanticEmbedding = stage4MobileClipEncoding(
+                uri = uri,
+                mediaId = mediaId,
+                reuseBitmap = faceBitmap
+            )
+
+            Log.d(TAG, "[Pass 1] Extracted ${embeddings.size} valid embeddings for mediaId=$mediaId, " +
+                "semanticEmbedding=${if (semanticEmbedding != null) "ok" else "null"}")
+            return Stage1WithEmbeddingsResult(faceRoiJson, embeddings, semanticEmbedding)
         } finally {
             faceBitmap.recycle()
         }
@@ -270,7 +278,7 @@ class TagGenerationPipeline(
     /**
      * MobileCLIP 语义编码
      *
-     * 使用 MobileCLIP-S0 生成 512 维 L2 归一化图像 embedding，
+     * 使用 MobileCLIP-S2 生成 512 维 L2 归一化图像 embedding，
      * 存储为 Base64 字符串供语义搜索使用。
      *
      * 说明：常规扫描已将该阶段内联合并到 Pass 1。此方法保留用于：
@@ -296,7 +304,7 @@ class TagGenerationPipeline(
 
         if (!engine.isInitialized) {
             Log.w(TAG, "[MobileCLIP] MobileClipEngine not initialized, attempting init")
-            if (!engine.initialize(useGpu = false)) {
+            if (!engine.initializeWithFallback()) {
                 Log.w(TAG, "[MobileCLIP] Failed to initialize MobileClipEngine")
                 return null
             }

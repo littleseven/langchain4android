@@ -31,7 +31,8 @@ class SemanticSearchEngine(
     private val context: Context,
     private val mediaDao: MediaDao,
     private val mobileClipEngine: MobileClipEngine? = null,
-    private val queryTranslator: ChineseQueryTranslator? = null
+    private val queryTranslator: ChineseQueryTranslator? = null,
+    private val mobileClipTokenizer: MobileClipTokenizer? = null
 ) {
     companion object {
         private const val TAG = "SemanticSearchEngine"
@@ -39,7 +40,7 @@ class SemanticSearchEngine(
 
     /** Tokenizer（延迟加载） */
     private val tokenizer: MobileClipTokenizer by lazy {
-        MobileClipTokenizer(context)
+        mobileClipTokenizer ?: MobileClipTokenizer(context)
     }
 
     /** 本地持有的 MobileClipEngine 实例（如果外部未注入） */
@@ -63,7 +64,7 @@ class SemanticSearchEngine(
      * @return 是否成功
      */
     fun initialize(useGpu: Boolean = false): Boolean {
-        // 1. 初始化 MobileClipEngine（加载 MNN 模型）
+        // 1. 初始化 MobileClipEngine（加载 ONNX 模型）
         if (!engine.isInitialized) {
             if (!engine.initialize(useGpu)) {
                 Log.w(TAG, "Failed to initialize MobileClipEngine")
@@ -119,8 +120,10 @@ class SemanticSearchEngine(
 
         // 2. 对每个候选编码为 text embedding
         val textEmbeddings = queryCandidates.mapNotNull { candidate ->
-            encodeTextQuery(candidate)?.also {
-                Log.d(TAG, "Encoded query candidate: '$candidate'")
+            encodeTextQuery(candidate)?.also { emb ->
+                Log.d(TAG, "Encoded query candidate: '$candidate' dim=${emb.size} " +
+                    "norm=${String.format("%.4f", emb.norm())} " +
+                    "first5=${emb.take(5).joinToString { String.format("%.3f", it) }}")
             }
         }
         if (textEmbeddings.isEmpty()) {
@@ -136,25 +139,44 @@ class SemanticSearchEngine(
         }
 
         // 4. 计算余弦相似度：同一图片取多个候选中的最大相似度
+        var nanCount = 0
+        var zeroNormCount = 0
+        val allScores = mutableListOf<Float>()
         val scoredResults = candidates
             .mapNotNull { entity ->
-                val imageEmbedding = base64ToFloatArray(entity.semanticEmbedding) ?: return@mapNotNull null
+                val imageEmbedding = base64ToFloatArray(entity.semanticEmbedding)
+                if (imageEmbedding == null) {
+                    Log.w(TAG, "Invalid image embedding for mediaId=${entity.id}")
+                    return@mapNotNull null
+                }
+                if (imageEmbedding.norm() < 1e-6f) {
+                    zeroNormCount++
+                    return@mapNotNull null
+                }
                 val maxSimilarity = textEmbeddings.maxOf { engine.cosineSimilarity(it, imageEmbedding) }
                 if (maxSimilarity.isNaN()) {
+                    nanCount++
                     Log.w(TAG, "NaN similarity for mediaId=${entity.id}")
                     return@mapNotNull null
                 }
+                allScores.add(maxSimilarity)
                 SemanticScoredMedia(entity.toDomain(), maxSimilarity)
             }
             .sortedByDescending { it.score }
             .take(topK)
 
-        // 日志：展示召回结果详情
+        // 日志：展示召回结果详情与相似度分布
+        val scoreStats = if (allScores.isNotEmpty()) {
+            "min=${String.format("%.3f", allScores.minOrNull() ?: 0f)}, " +
+                "max=${String.format("%.3f", allScores.maxOrNull() ?: 0f)}, " +
+                "avg=${String.format("%.3f", allScores.average())}, " +
+                "median=${String.format("%.3f", allScores.sorted().let { it[it.size / 2] })}"
+        } else "no valid scores"
         if (scoredResults.isNotEmpty()) {
             val topResults = scoredResults.take(3).joinToString { "${it.media.fileName}=${String.format("%.3f", it.score)}" }
-            Log.i(TAG, "Semantic recall: query='$query' -> candidates=${queryCandidates}, embeddings=${textEmbeddings.size}, imageCandidates=${candidates.size}, returned=${scoredResults.size}, top3=[$topResults]")
+            Log.i(TAG, "Semantic recall: query='$query' -> candidates=${queryCandidates}, embeddings=${textEmbeddings.size}, imageCandidates=${candidates.size}, returned=${scoredResults.size}, stats=[$scoreStats], nan=$nanCount, zeroNorm=$zeroNormCount, top3=[$topResults]")
         } else {
-            Log.w(TAG, "Semantic recall empty: query='$query' -> candidates=${queryCandidates}, imageCandidates=${candidates.size}, no match")
+            Log.w(TAG, "Semantic recall empty: query='$query' -> candidates=${queryCandidates}, imageCandidates=${candidates.size}, stats=[$scoreStats], nan=$nanCount, zeroNorm=$zeroNormCount")
         }
 
         return scoredResults
@@ -240,8 +262,11 @@ class SemanticSearchEngine(
     /**
      * 根据结构化过滤条件获取候选集
      *
-     * 语义召回层必须尊重所有结构化过滤条件，否则无关图片可能因 CLIP 相似度偏高进入最终结果。
-     * 当前实现：组合时间范围 / 关键词 / OCR / 地点 / 人脸过滤，再与语义搜索叠加。
+     * 语义召回层必须尊重所有**结构化**过滤条件（时间/人脸/OCR/地点），
+     * 否则无关图片可能因 CLIP 相似度偏高进入最终结果。
+     *
+     * 注意：[filter.keywords] 用于 SQL 标签/文件名搜索，在语义召回中**故意忽略**：
+     * 语义搜索的价值正是跨越标签词汇鸿沟，匹配标签里没有出现过的词（如英文 "woman" 对应中文标签）。
      */
     private suspend fun getFilteredCandidates(filter: StructuredFilter): List<MediaEntity> {
         // 1. 基础候选集：优先用时间范围缩小，否则取全量有 embedding 的
@@ -252,26 +277,17 @@ class SemanticSearchEngine(
             mediaDao.getMediaWithSemanticEmbedding()
         }.distinctBy { it.id }
 
-        if (candidates.isEmpty()) return emptyList()
+        if (candidates.isEmpty()) {
+            Log.d(TAG, "No semantic candidates after base filtering")
+            return emptyList()
+        }
 
-        // 2. 在候选集上应用剩余结构化过滤
+        // 2. 在候选集上应用结构化过滤（忽略 filter.keywords）
         return candidates.filter { entity ->
             // 人脸过滤
             if (filter.hasFaces == true && !entity.hasFace) return@filter false
 
-            // 通用关键词：匹配 labels / fileName（大小写不敏感）
-            if (!filter.keywords.isNullOrEmpty()) {
-                val haystack = buildString {
-                    append(entity.labels.orEmpty())
-                    append(entity.fileName.orEmpty())
-                }.lowercase()
-                val matched = filter.keywords.any { keyword ->
-                    keyword.isNotBlank() && haystack.contains(keyword.lowercase())
-                }
-                if (!matched) return@filter false
-            }
-
-            // OCR 关键词
+            // OCR 关键词（硬性文本条件）
             if (!filter.ocrKeywords.isNullOrEmpty()) {
                 val ocr = entity.ocrText.orEmpty().lowercase()
                 val matched = filter.ocrKeywords.any { keyword ->
@@ -280,7 +296,7 @@ class SemanticSearchEngine(
                 if (!matched) return@filter false
             }
 
-            // 地点关键词
+            // 地点关键词（硬性地理条件）
             if (!filter.locationKeywords.isNullOrEmpty()) {
                 val location = entity.locationName.orEmpty().lowercase()
                 val matched = filter.locationKeywords.any { keyword ->
@@ -290,6 +306,10 @@ class SemanticSearchEngine(
             }
 
             true
+        }.also {
+            Log.d(TAG, "Semantic candidate filter: base=${candidates.size}, " +
+                "afterStructured=${it.size}, " +
+                "ignoredKeywords=${filter.keywords}")
         }
     }
 
@@ -374,3 +394,16 @@ private fun MediaEntity.toDomain() =
         locationName = locationName,
         indexedAt = indexedAt
     )
+
+/**
+ * FloatArray L2 范数（调试用）
+ */
+private fun FloatArray.norm(): Float {
+    var sum = 0f
+    for (v in this) {
+        if (!v.isNaN() && !v.isInfinite()) {
+            sum += v * v
+        }
+    }
+    return kotlin.math.sqrt(sum)
+}

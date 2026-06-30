@@ -91,19 +91,14 @@ class MediaSearchEngine(
         val sqlResults = queryCandidates
             .flatMap { mediaDao.searchAll(it) }
             .map { it.toDomain() }
-            .toMutableList()
-
-        // 人物关键词回退
-        if (QueryParser.isPeopleSearch(query)) {
-            sqlResults.addAll(mediaDao.searchByHasFace().map { it.toDomain() })
-        }
+            .distinct()
 
         // 语义召回（无结构化过滤时全量语义搜索）
         val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
             searchSemantic(query, null)
         } else emptyList()
 
-        val merged = mergeAndRank(sqlResults.distinct(), semanticResults)
+        val merged = mergeAndRank(sqlResults, semanticResults)
         return SearchResult(merged, query)
     }
 
@@ -200,7 +195,6 @@ class MediaSearchEngine(
         applyOcrKeywords(filter.ocrKeywords, resultMap)
         applyLocationKeywords(filter.locationKeywords, resultMap)
         applyFaceFilter(filter.hasFaces, resultMap)
-        applyPeopleFallback(filter.keywords, resultMap)
 
         return resultMap.values.sortedByDescending { it.captureDate }
     }
@@ -276,14 +270,6 @@ class MediaSearchEngine(
         resultMap: MutableMap<Long, MediaAsset>
     ) {
         if (hasFaces != true) return
-        mediaDao.searchByHasFace().forEach { resultMap[it.id] = it.toDomain() }
-    }
-
-    private suspend fun applyPeopleFallback(
-        keywords: List<String>,
-        resultMap: MutableMap<Long, MediaAsset>
-    ) {
-        if (keywords.none { it in PEOPLE_SEARCH_KEYWORDS }) return
         mediaDao.searchByHasFace().forEach { resultMap[it.id] = it.toDomain() }
     }
 
@@ -443,15 +429,6 @@ Notes:
         for (candidate in queryCandidates) {
             searchByCandidateWithDiagnostics(candidate, resultMap)
         }
-        if (QueryParser.isPeopleSearch(query)) {
-            val peopleStart = System.currentTimeMillis()
-            mediaDao.searchByHasFace().forEach { entity ->
-                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-                dims.add("has_face")
-                resultMap[entity.id] = media to dims
-            }
-            breakdown.add(RecallDimension("Face", -1, System.currentTimeMillis() - peopleStart))
-        }
         val fallbackTimeMs = System.currentTimeMillis() - fallbackStart
 
         val sqlResults = resultMap.values.map { (media, dims) ->
@@ -569,7 +546,6 @@ Notes:
         applyOcrKeywordsWithDiagnostics(filter.ocrKeywords, resultMap, breakdown)
         applyLocationKeywordsWithDiagnostics(filter.locationKeywords, resultMap, breakdown)
         applyFaceFilterWithDiagnostics(filter.hasFaces, resultMap, breakdown)
-        applyPeopleFallbackWithDiagnostics(filter.keywords, resultMap, breakdown)
 
         return resultMap.values.map { it.first to it.second.toSet() } to breakdown
     }
@@ -678,22 +654,6 @@ Notes:
         breakdown.add(RecallDimension("Face", count, System.currentTimeMillis() - start))
     }
 
-    private suspend fun applyPeopleFallbackWithDiagnostics(
-        keywords: List<String>,
-        resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>,
-        breakdown: MutableList<RecallDimension>
-    ) {
-        if (keywords.none { it in PEOPLE_SEARCH_KEYWORDS }) return
-        val start = System.currentTimeMillis()
-        var count = 0
-        mediaDao.searchByHasFace().forEach { entity ->
-            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-            if (dims.add("has_face")) count++
-            resultMap[entity.id] = media to dims
-        }
-        breakdown.add(RecallDimension("PeopleFallback", count, System.currentTimeMillis() - start))
-    }
-
     private suspend fun searchByCandidateWithDiagnostics(
         candidate: String,
         resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>
@@ -799,14 +759,6 @@ Notes:
 
         /** 无时间 boost */
         private const val NO_TIME_BOOST = 0f
-
-        /** 人物语义搜索关键词（含儿童/婴儿等同义概念） */
-        val PEOPLE_SEARCH_KEYWORDS = setOf(
-            "人", "人物", "人脸", "合照", "合影", "自拍", "头像",
-            "小孩", "儿童", "婴儿", "宝宝", "孩子",
-            "people", "person", "face", "portrait", "selfie",
-            "child", "children", "kid", "kids", "baby", "infant", "toddler"
-        )
     }
 }
 

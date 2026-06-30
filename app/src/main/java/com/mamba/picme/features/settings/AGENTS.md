@@ -122,7 +122,7 @@
   - `picme-face-det-500m-mnn`（默认人脸检测，Det10G 已降级为可选）
   - `picme-face-landmark-mnn`（人脸关键点）
   - `picme-face-embedding-mnn`（人脸聚类/识别）
-  - `mobileclip-mnn`（语义搜索/相册打标）
+  - `mobileclip-onnx`（语义搜索/相册打标）
   - `opus-mt-zh-en`（中文查询翻译）
 
 **Agent 模式设置**

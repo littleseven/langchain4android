@@ -91,7 +91,6 @@ endif()
 set(NATIVE_SOURCES
     mnn_jni_bridge.cpp
     mnn_face_detector.cpp
-    mnn_clip_encoder.cpp
     ncnn_jni_bridge.cpp
     ncnn_face_detector.cpp
 )

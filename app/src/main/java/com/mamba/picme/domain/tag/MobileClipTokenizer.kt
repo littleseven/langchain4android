@@ -13,7 +13,7 @@ import java.util.regex.Pattern
  * MobileCLIP BPE Tokenizer
  *
  * 解析 Hugging Face 格式的 tokenizer.json，实现文本 → token IDs 编码。
- * 模型配套文件已随 MobileCLIP-MNN 下载到 llm_models/mobileclip-mnn/ 目录。
+ * 模型配套文件已随 MobileCLIP-ONNX 下载到 llm_models/mobileclip-onnx/ 目录。
  *
  * 编码流程：
  * 1. 文本预处理（NFC 规范化、小写、去除多余空格）

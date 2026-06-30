@@ -178,24 +178,20 @@
     "tags": ["beauty-camera", "face", "detection", "ncnn"]
   },
   {
-    "id": "mobileclip-mnn",
-    "name": "MobileCLIP-MNN",
-    "description": "MobileCLIP-S0 多模态语义编码模型 (MNN 格式)，512维图像/文本embedding，用于语义搜索",
+    "id": "mobileclip-onnx",
+    "name": "MobileCLIP-S2-ONNX-FP32",
+    "description": "MobileCLIP-S2 多模态语义编码模型 (ONNX fp32 格式)，512维图像/文本embedding，用于语义搜索。fp16 在 ONNX Runtime Android CPU 上会出现 NaN/Inf，因此使用 fp32",
     "type": "VISION",
-    "size": 220000000,
+    "size": 397000000,
     "sources": {
-      "ModelScope": "budaoshou/MobileCLIP-MNN"
+      "ModelScope": "budaoshou/MobileCLIP-ONNX"
     },
     "files": [
-      "vision_model.mnn",
-      "text_model.mnn",
-      "configuration.json",
-      "tokenizer.json",
-      "tokenizer_config.json",
-      "vocab.txt",
-      "merges.txt"
+      "vision_model.onnx",
+      "text_model.onnx",
+      "tokenizer.json"
     ],
-    "tags": ["must-have", "photo-tagging", "vision", "clip", "mnn", "semantic"]
+    "tags": ["must-have", "photo-tagging", "vision", "clip", "onnx", "semantic"]
   },
   {
     "id": "opus-mt-zh-en",
