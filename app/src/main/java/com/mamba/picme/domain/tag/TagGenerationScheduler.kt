@@ -127,7 +127,8 @@ class TagGenerationScheduler(
             normalizer = normalizer,
             openClGuardian = openClGuardian,
             userSettingsRepository = userSettingsRepository,
-            mobileClipEngine = mobileClip
+            mobileClipEngine = mobileClip,
+            mlKitTagExtractor = MlKitTagExtractor(context)
         )
     }
 
@@ -744,6 +745,24 @@ class TagGenerationScheduler(
         if (embedding != null) {
             dao.updateSemanticEmbedding(entity.id, embedding)
         }
+
+        delay(getThrottleMs())
+    }
+
+    /**
+     * [原子任务] ML Kit Image Labeler 英文标签提取
+     */
+    suspend fun executeMlKitTagging(mediaId: Long) {
+        val dao = db.mediaDao()
+        val entity = dao.getMediaById(mediaId) ?: return
+
+        val labels = pipeline.extractMlKitLabels(entity.uri)
+
+        // 若任务已被取消，丢弃本次结果
+        currentCoroutineContext().ensureActive()
+
+        val labelsJson = MlKitTagExtractor.toJsonArray(labels)
+        dao.updateMlKitLabels(entity.id, labelsJson)
 
         delay(getThrottleMs())
     }

@@ -86,6 +86,7 @@ class TagScanOrchestrator(
             TagScanPass.DBSCAN -> "2"
             TagScanPass.QWEN_TAGGING -> "3"
             TagScanPass.MOBILE_CLIP_ENCODING -> "4"
+            TagScanPass.ML_KIT_TAGGING -> "5"
         }
 
         /**
@@ -109,6 +110,8 @@ class TagScanOrchestrator(
             val remainingForPass1 = db.mediaDao().getMediaWithoutFaceRoiCount()
             // Pass 3 剩余独立统计：所有无 labels 的媒体，不强制要求已有 faceRoiResult
             val remainingForPass3 = unlabeledCount
+            val withMlKitLabels = db.mediaDao().getMlKitLabeledCount()
+            val remainingForMlKit = db.mediaDao().getUnlabeledMlKitMediaCount()
 
             TagScanDbStats(
                 totalMedia = totalMedia,
@@ -118,7 +121,9 @@ class TagScanOrchestrator(
                 personCount = personCount,
                 faceEmbeddingCount = faceEmbeddingCount,
                 remainingForPass1 = remainingForPass1,
-                remainingForPass3 = remainingForPass3
+                remainingForPass3 = remainingForPass3,
+                withMlKitLabels = withMlKitLabels,
+                remainingForMlKit = remainingForMlKit
             )
         }
     }
@@ -213,7 +218,7 @@ class TagScanOrchestrator(
         val passes = TagCategory.toPasses(categories)
         val entities = db.mediaDao().getMediaByIds(mediaIds)
         val filteredIds = if (mode == ScanMode.INCREMENTAL) {
-            entities.filter { !hasAllCategories(it.labels, categories) }.map { it.id }
+            entities.filter { !hasAllCategories(it, categories) }.map { it.id }
         } else {
             entities.map { it.id }
         }
@@ -303,6 +308,11 @@ class TagScanOrchestrator(
         if (pass == TagScanPass.MOBILE_CLIP_ENCODING && mode == ScanMode.FULL) {
             // 单独重编码 MobileCLIP：清空语义 embedding
             db.mediaDao().resetAllSemanticEmbeddings()
+        }
+
+        if (pass == TagScanPass.ML_KIT_TAGGING && mode == ScanMode.FULL) {
+            // 全量重跑 ML Kit 标签：清空已有 ML Kit 标签
+            db.mediaDao().resetAllMlKitLabels()
         }
 
         // 手动 Pass 增量：按阶段特征过滤，不受时间窗口限制
@@ -451,6 +461,21 @@ class TagScanOrchestrator(
             )
         }
 
+        // Pass 2.5: ML Kit 英文标签提取（每张媒体一个独立任务）
+        if (passes.contains(TagScanPass.ML_KIT_TAGGING)) {
+            tasks += mediaIds.map { mediaId ->
+                TagScanTaskEntity(
+                    sessionId = sessionId,
+                    mediaId = mediaId,
+                    pass = TagScanPass.ML_KIT_TAGGING,
+                    tagCategories = categoriesJson,
+                    status = TagScanTaskStatus.PENDING,
+                    priority = 1,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
+        }
+
         // Pass 3: 每张媒体一个独立任务
         if (passes.contains(TagScanPass.QWEN_TAGGING)) {
             tasks += mediaIds.map { mediaId ->
@@ -512,6 +537,16 @@ class TagScanOrchestrator(
                     sessionId = sessionId,
                     mediaId = mediaId,
                     pass = TagScanPass.MOBILE_CLIP_ENCODING,
+                    status = TagScanTaskStatus.PENDING,
+                    priority = 0,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
+            TagScanPass.ML_KIT_TAGGING -> mediaIds.map { mediaId ->
+                TagScanTaskEntity(
+                    sessionId = sessionId,
+                    mediaId = mediaId,
+                    pass = TagScanPass.ML_KIT_TAGGING,
                     status = TagScanTaskStatus.PENDING,
                     priority = 0,
                     createdAt = System.currentTimeMillis()
@@ -593,6 +628,7 @@ class TagScanOrchestrator(
                 TagScanPass.DBSCAN -> scheduler.executeDbscan()
                 TagScanPass.QWEN_TAGGING -> scheduler.executeQwenTagging(task.mediaId)
                 TagScanPass.MOBILE_CLIP_ENCODING -> scheduler.executeMobileClipEncoding(task.mediaId)
+                TagScanPass.ML_KIT_TAGGING -> scheduler.executeMlKitTagging(task.mediaId)
             }
             true
         } catch (e: CancellationException) {
@@ -800,7 +836,7 @@ class TagScanOrchestrator(
                 query.hasFace?.let { entity.hasFace == it } ?: true
             }.filter { entity ->
                 if (query.missingAnyCategory.isNullOrEmpty()) true
-                else !hasAllCategories(entity.labels, query.missingAnyCategory)
+                else !hasAllCategories(entity, query.missingAnyCategory)
             }
             result += matching.map { it.id }
         }
@@ -816,24 +852,47 @@ class TagScanOrchestrator(
             TagScanPass.FACE_DETECTION -> entity.faceRoiResult.isNullOrEmpty()
             TagScanPass.QWEN_TAGGING -> entity.labels.isNullOrEmpty()
             TagScanPass.MOBILE_CLIP_ENCODING -> entity.semanticEmbedding.isNullOrEmpty()
+            TagScanPass.ML_KIT_TAGGING -> entity.mlKitLabels.isNullOrEmpty()
             TagScanPass.DBSCAN -> false // DBSCAN 是全局任务，不针对单媒体
         }
     }
 
-    private fun hasAllCategories(labelsJson: String?, categories: Set<TagCategory>): Boolean {
+    private fun hasAllCategories(entity: com.mamba.picme.data.model.MediaEntity, categories: Set<TagCategory>): Boolean {
+        return categories.all { category ->
+            when (category) {
+                TagCategory.FACE -> hasFaceCategory(entity.labels)
+                TagCategory.SCENE -> hasQwenField(entity.labels, "scene")
+                TagCategory.ACTIVITY -> hasQwenField(entity.labels, "activity")
+                TagCategory.OBJECTS -> hasQwenArrayField(entity.labels, "objects")
+                TagCategory.TAGS -> hasQwenArrayField(entity.labels, "tags")
+                TagCategory.SUMMARY -> hasQwenField(entity.labels, "qwenSummary")
+                TagCategory.ML_KIT_LABELS -> !entity.mlKitLabels.isNullOrEmpty()
+            }
+        }
+    }
+
+    private fun hasFaceCategory(labelsJson: String?): Boolean {
         if (labelsJson.isNullOrEmpty()) return false
         return try {
-            val obj = JSONObject(labelsJson)
-            categories.all { category ->
-                when (category) {
-                    TagCategory.FACE -> obj.has("face")
-                    TagCategory.SCENE -> obj.optString("scene").isNotEmpty()
-                    TagCategory.ACTIVITY -> obj.optString("activity").isNotEmpty()
-                    TagCategory.OBJECTS -> obj.optJSONArray("objects")?.length()?.let { it > 0 } ?: false
-                    TagCategory.TAGS -> obj.optJSONArray("tags")?.length()?.let { it > 0 } ?: false
-                    TagCategory.SUMMARY -> obj.optString("qwenSummary").isNotEmpty()
-                }
-            }
+            JSONObject(labelsJson).has("face")
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun hasQwenField(labelsJson: String?, field: String): Boolean {
+        if (labelsJson.isNullOrEmpty()) return false
+        return try {
+            JSONObject(labelsJson).optString(field).isNotEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun hasQwenArrayField(labelsJson: String?, field: String): Boolean {
+        if (labelsJson.isNullOrEmpty()) return false
+        return try {
+            JSONObject(labelsJson).optJSONArray(field)?.length()?.let { it > 0 } ?: false
         } catch (e: Exception) {
             false
         }
@@ -856,7 +915,9 @@ class TagScanOrchestrator(
         val personCount: Int,
         val faceEmbeddingCount: Int,
         val remainingForPass1: Int,
-        val remainingForPass3: Int
+        val remainingForPass3: Int,
+        val withMlKitLabels: Int = 0,
+        val remainingForMlKit: Int = 0
     )
 
     private fun List<StatusCount>.count(status: TagScanTaskStatus): Int {

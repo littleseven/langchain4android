@@ -72,6 +72,8 @@ fun TagGenerationControlScreen(
     var embeddingCount by remember { mutableIntStateOf(0) }
     var remainingPass1 by remember { mutableIntStateOf(0) }
     var remainingPass3 by remember { mutableIntStateOf(0) }
+    var withMlKitLabels by remember { mutableIntStateOf(0) }
+    var remainingMlKit by remember { mutableIntStateOf(0) }
 
     // 精细控制：类别 / 时间范围 / 模式
     var selectedCategories by remember { mutableStateOf(setOf<TagCategory>()) }
@@ -94,6 +96,8 @@ fun TagGenerationControlScreen(
                 embeddingCount = stats.faceEmbeddingCount
                 remainingPass1 = stats.remainingForPass1
                 remainingPass3 = stats.remainingForPass3
+                withMlKitLabels = stats.withMlKitLabels
+                remainingMlKit = stats.remainingForMlKit
             } catch (e: Exception) {
                 android.util.Log.e("TagGenControl", "refreshStats failed", e)
             }
@@ -160,7 +164,9 @@ fun TagGenerationControlScreen(
                 personCount = personCount,
                 embeddingCount = embeddingCount,
                 remainingPass1 = remainingPass1,
-                remainingPass3 = remainingPass3
+                remainingPass3 = remainingPass3,
+                withMlKitLabels = withMlKitLabels,
+                remainingMlKit = remainingMlKit
             )
 
             // ── 3-Pass 混合管道概览卡片 ────────────────
@@ -411,6 +417,21 @@ fun TagGenerationControlScreen(
                 )
 
                 Spacer(Modifier.height(8.dp))
+
+                PassControlCard(
+                    title = "ML Kit 英文标签",
+                    subtitle = "ML Kit Image Labeler 快速英文标签：$withMlKitLabels / $totalMedia 张 · 剩余 $remainingMlKit 张",
+                    onIncremental = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPassMlKit(context))
+                    },
+                    onFull = {
+                        refreshStats()
+                        context.startForegroundService(TagGenerationService.intentScanPassMlKitFull(context))
+                    }
+                )
+
+                Spacer(Modifier.height(8.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(8.dp))
 
@@ -472,6 +493,13 @@ fun TagGenerationControlScreen(
                         selected = TagCategory.SUMMARY in selectedCategories,
                         onClick = {
                             selectedCategories = selectedCategories.toggle(TagCategory.SUMMARY)
+                        }
+                    )
+                    CategoryChip(
+                        label = "ML Kit",
+                        selected = TagCategory.ML_KIT_LABELS in selectedCategories,
+                        onClick = {
+                            selectedCategories = selectedCategories.toggle(TagCategory.ML_KIT_LABELS)
                         }
                     )
                 }
@@ -640,6 +668,7 @@ private fun passDisplayName(pass: TagScanPass?): String = when (pass) {
     TagScanPass.DBSCAN -> "Pass 2: DBSCAN 聚类"
     TagScanPass.QWEN_TAGGING -> "Pass 3: Qwen 标签"
     TagScanPass.MOBILE_CLIP_ENCODING -> "MobileCLIP 语义编码（单独）"
+    TagScanPass.ML_KIT_TAGGING -> "Pass 5: ML Kit 英文标签"
     null -> "准备中"
 }
 
@@ -742,7 +771,9 @@ private fun StatsCard(
     personCount: Int,
     embeddingCount: Int,
     remainingPass1: Int,
-    remainingPass3: Int
+    remainingPass3: Int,
+    withMlKitLabels: Int,
+    remainingMlKit: Int
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -770,6 +801,8 @@ private fun StatsCard(
                 StatItem("Embedding", embeddingCount.toString())
                 StatItem("Pass1剩余", remainingPass1.toString())
                 StatItem("Pass3剩余", remainingPass3.toString())
+                StatItem("ML Kit", withMlKitLabels.toString())
+                StatItem("MLKit剩余", remainingMlKit.toString())
             }
         }
     }

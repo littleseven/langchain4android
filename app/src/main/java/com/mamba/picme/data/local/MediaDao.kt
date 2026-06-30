@@ -184,9 +184,38 @@ interface MediaDao {
     @Query("UPDATE media_assets SET labels = :labels WHERE id = :mediaId")
     suspend fun updateLabels(mediaId: Long, labels: String)
 
+    /** 更新媒体的 ML Kit 英文标签 */
+    @Query("UPDATE media_assets SET mlKitLabels = :labels WHERE id = :mediaId")
+    suspend fun updateMlKitLabels(mediaId: Long, labels: String)
+
     /** 重置所有 AI 标签（用于强制重新标记） */
     @Query("UPDATE media_assets SET labels = NULL")
     suspend fun resetAllLabels()
+
+    /** 重置所有 ML Kit 标签（用于强制重新标记） */
+    @Query("UPDATE media_assets SET mlKitLabels = NULL")
+    suspend fun resetAllMlKitLabels()
+
+    /** 按 ML Kit 标签搜索 */
+    @Query("SELECT * FROM media_assets WHERE mlKitLabels LIKE '%' || :label || '%' ORDER BY captureDate DESC")
+    suspend fun searchByMlKitLabel(label: String): List<MediaEntity>
+
+    /** 未生成 ML Kit 标签的媒体 */
+    @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getUnlabeledMlKitMediaIds() / getUnlabeledMlKitMediaCount()")
+    @Query("SELECT * FROM media_assets WHERE mlKitLabels IS NULL OR mlKitLabels = '' ORDER BY captureDate DESC")
+    suspend fun getUnlabeledMlKitMedia(): List<MediaEntity>
+
+    /** 仅获取未生成 ML Kit 标签的媒体 ID（内存友好） */
+    @Query("SELECT id FROM media_assets WHERE mlKitLabels IS NULL OR mlKitLabels = '' ORDER BY captureDate DESC")
+    suspend fun getUnlabeledMlKitMediaIds(): List<Long>
+
+    /** 未生成 ML Kit 标签的媒体数量 */
+    @Query("SELECT COUNT(*) FROM media_assets WHERE mlKitLabels IS NULL OR mlKitLabels = ''")
+    suspend fun getUnlabeledMlKitMediaCount(): Int
+
+    /** 已有 ML Kit 标签的媒体数量 */
+    @Query("SELECT COUNT(*) FROM media_assets WHERE mlKitLabels IS NOT NULL AND mlKitLabels != ''")
+    suspend fun getMlKitLabeledCount(): Int
 
     // ── 人脸 ROI 结果持久化（3-Pass 混合管道）──────────────────
 

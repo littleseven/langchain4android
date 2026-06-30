@@ -47,7 +47,8 @@ class TagGenerationPipeline(
     private val openClGuardian: OpenClGuardian? = null,
     private val userSettingsRepository: UserSettingsRepository? = null,
     private val promptProvider: TagPromptProvider = DefaultTagPromptProvider(),
-    private val mobileClipEngine: MobileClipEngine? = null
+    private val mobileClipEngine: MobileClipEngine? = null,
+    private val mlKitTagExtractor: MlKitTagExtractor? = null
 ) {
 
     companion object {
@@ -269,6 +270,20 @@ class TagGenerationPipeline(
      */
     fun releaseMobileClip() {
         mobileClipEngine?.release()
+    }
+
+    /**
+     * 提取 ML Kit Image Labeler 英文标签
+     *
+     * @param uri 照片 Content URI
+     * @return 英文标签列表，失败返回空列表
+     */
+    fun extractMlKitLabels(uri: String): List<String> {
+        val extractor = mlKitTagExtractor ?: run {
+            Log.w(TAG, "[ML Kit] MlKitTagExtractor not available")
+            return emptyList()
+        }
+        return extractor.extract(uri)
     }
 
     // ═══════════════════════════════════════════════════

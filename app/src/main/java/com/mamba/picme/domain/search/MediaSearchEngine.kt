@@ -236,9 +236,10 @@ class MediaSearchEngine(
         }
 
         val labelResults = mediaDao.searchByLabel(candidate)
+        val mlKitResults = mediaDao.searchByMlKitLabel(candidate)
         val ocrResults = mediaDao.searchByOcrText(candidate)
         val nameResults = mediaDao.searchByFileName(candidate)
-        (labelResults + ocrResults + nameResults).forEach { resultMap[it.id] = it.toDomain() }
+        (labelResults + mlKitResults + ocrResults + nameResults).forEach { resultMap[it.id] = it.toDomain() }
     }
 
     private suspend fun applyOcrKeywords(
@@ -685,6 +686,11 @@ Notes:
         mediaDao.searchByFileName(candidate).forEach { entity ->
             val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
             dims.add("file_name")
+            resultMap[entity.id] = media to dims
+        }
+        mediaDao.searchByMlKitLabel(candidate).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("mlkit_label")
             resultMap[entity.id] = media to dims
         }
     }

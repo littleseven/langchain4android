@@ -18,6 +18,8 @@ data class MediaEntity(
     val source: String? = null,
     // 元数据索引字段（Phase 1 自然语言搜索）
     val labels: String? = null,           // JSON 数组：["猫","户外","食物"]
+    /** ML Kit Image Labeler 输出的英文标签（JSON 数组），与 Qwen 的 labels 字段完全独立 */
+    val mlKitLabels: String? = null,      // JSON 数组：["Outdoor","Food"]
     val ocrText: String? = null,          // OCR 提取的文字
     val latitude: Double? = null,         // GPS 纬度
     val longitude: Double? = null,        // GPS 经度
