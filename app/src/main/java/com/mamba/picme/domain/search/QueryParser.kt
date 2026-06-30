@@ -81,6 +81,53 @@ object QueryParser {
 
     // ── 时间词解析 ──────────────────────────────────────────
 
+    /**
+     * 解析相对年份+月份，如"去年3月""今年5月""前年8月"
+     */
+    private fun parseRelativeYearMonth(query: String): TimeRange? {
+        val markers = listOf("去年" to -1, "今年" to 0, "前年" to -2)
+        for ((marker, yearOffset) in markers) {
+            val idx = query.indexOf(marker)
+            if (idx < 0) continue
+            val afterMarker = query.substring(idx + marker.length)
+            val month = parseMonthAfterYear(afterMarker) ?: continue
+            val year = currentYear + yearOffset
+            return TimeRange(
+                startMs = monthStartMs(year, month - 1),
+                endMs = monthEndMs(year, month - 1)
+            )
+        }
+        return null
+    }
+
+    /**
+     * 解析绝对年份+月份，如"2024年3月"
+     */
+    private fun parseAbsoluteYearMonth(query: String): TimeRange? {
+        val yearMatch = Regex("""(\d{4})年""").find(query)
+        if (yearMatch != null) {
+            val year = yearMatch.groupValues[1].toInt()
+            val afterYear = query.substring(yearMatch.range.last + 1)
+            val month = parseMonthAfterYear(afterYear) ?: return TimeRange(
+                startMs = monthStartMs(year, 0),
+                endMs = monthEndMs(year, 11)
+            )
+            return TimeRange(
+                startMs = monthStartMs(year, month - 1),
+                endMs = monthEndMs(year, month - 1)
+            )
+        }
+        return null
+    }
+
+    /**
+     * 从"年"后面的字符串解析月份数字，如"3月""12月""3月的照片"
+     */
+    private fun parseMonthAfterYear(afterYear: String): Int? {
+        val monthMatch = Regex("""^(\d{1,2})月""").find(afterYear)
+        return monthMatch?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 12)
+    }
+
     private fun monthStartMs(year: Int, month: Int): Long {
         return Calendar.getInstance().apply {
             set(Calendar.YEAR, year)
@@ -109,15 +156,28 @@ object QueryParser {
      * 解析查询中的时间范围（公开给 QuerySegmenter 复用）
      */
     fun parseTimeRange(query: String): TimeRange? {
-        // "去年" → 上一年全年
+        // 1. 精确到月：去年3月 / 今年5月 / 前年8月 / 2024年3月
+        val relativeYearMonth = parseRelativeYearMonth(query)
+        if (relativeYearMonth != null) return relativeYearMonth
+
+        val absoluteYearMonth = parseAbsoluteYearMonth(query)
+        if (absoluteYearMonth != null) return absoluteYearMonth
+
+        // 2. 整年：去年 / 今年 / 前年 / 2024年
+        val yearMatch = Regex("(\\d{4})年").find(query)
+        if (yearMatch != null) {
+            val year = yearMatch.groupValues[1].toInt()
+            return TimeRange(
+                startMs = monthStartMs(year, 0),
+                endMs = monthEndMs(year, 11)
+            )
+        }
         if (query.contains("去年")) {
             return TimeRange(
                 startMs = monthStartMs(currentYear - 1, 0),
                 endMs = monthEndMs(currentYear - 1, 11)
             )
         }
-
-        // "今年" / "今年夏天"
         if (query.contains("今年")) {
             val startMonth = if (query.contains("夏天")) 5 else 0
             val endMonth = if (query.contains("夏天")) 7 else 11
@@ -126,16 +186,20 @@ object QueryParser {
                 endMs = monthEndMs(currentYear, endMonth)
             )
         }
+        if (query.contains("前年")) {
+            return TimeRange(
+                startMs = monthStartMs(currentYear - 2, 0),
+                endMs = monthEndMs(currentYear - 2, 11)
+            )
+        }
 
-        // 独立 "夏天"（假设指今年夏天）
+        // 3. 季节
         if (query.contains("夏天")) {
             return TimeRange(
                 startMs = monthStartMs(currentYear, 5),
                 endMs = monthEndMs(currentYear, 7)
             )
         }
-
-        // "春天"/"秋天"/"冬天"
         val seasonMap = mapOf("春天" to 2, "秋天" to 8, "冬天" to 11)
         for ((season, startMonth) in seasonMap) {
             if (query.contains(season)) {
@@ -146,9 +210,12 @@ object QueryParser {
             }
         }
 
-        // "上个月"
+        // 4. 上个月
         if (query.contains("上个月")) {
             val cal = Calendar.getInstance()
+            cal.set(Calendar.YEAR, currentYear)
+            cal.set(Calendar.MONTH, currentMonth - 1)
+            cal.set(Calendar.DAY_OF_MONTH, 1)
             cal.add(Calendar.MONTH, -1)
             val month = cal.get(Calendar.MONTH)
             val year = cal.get(Calendar.YEAR)
@@ -158,7 +225,25 @@ object QueryParser {
             )
         }
 
-        // "昨天"/"今天"/"前天"
+        // 5. 本周 / 上周
+        if (query.contains("本周") || query.contains("上周")) {
+            val cal = Calendar.getInstance()
+            if (query.contains("上周")) cal.add(Calendar.WEEK_OF_YEAR, -1)
+            cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+            cal.set(Calendar.HOUR_OF_DAY, 0)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            val start = cal.timeInMillis
+            cal.add(Calendar.DAY_OF_YEAR, 6)
+            cal.set(Calendar.HOUR_OF_DAY, 23)
+            cal.set(Calendar.MINUTE, 59)
+            cal.set(Calendar.SECOND, 59)
+            val end = cal.timeInMillis
+            return TimeRange(startMs = start, endMs = end)
+        }
+
+        // 6. 昨天 / 今天 / 前天
         val relativeDayMap = mapOf("前天" to -2, "昨天" to -1, "今天" to 0)
         for ((word, offset) in relativeDayMap) {
             if (query.contains(word)) {
