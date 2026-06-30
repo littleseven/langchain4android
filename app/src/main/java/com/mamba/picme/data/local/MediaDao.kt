@@ -337,6 +337,36 @@ interface MediaDao {
         """
     )
     suspend fun filterMediaNeedingScan(ids: List<Long>, before: Long): List<MediaEntity>
+
+    // ── 显式约束优先搜索：候选集内查询 ─────────────────────
+
+    /** 按时间范围获取媒体 ID */
+    @Query("SELECT id FROM media_assets WHERE captureDate BETWEEN :startMs AND :endMs")
+    suspend fun getMediaIdsByTimeRange(startMs: Long, endMs: Long): List<Long>
+
+    /** 按地点关键词获取媒体 ID */
+    @Query("SELECT id FROM media_assets WHERE locationName LIKE '%' || :keyword || '%'")
+    suspend fun getMediaIdsByLocationKeyword(keyword: String): List<Long>
+
+    /** 按人脸标记获取媒体 ID */
+    @Query("SELECT id FROM media_assets WHERE hasFace = 1")
+    suspend fun getMediaIdsByHasFace(): List<Long>
+
+    /** 在指定 ID 列表中搜索标签 */
+    @Query("SELECT * FROM media_assets WHERE id IN (:ids) AND labels LIKE '%' || :keyword || '%'")
+    suspend fun searchLabelsInIds(ids: List<Long>, keyword: String): List<MediaEntity>
+
+    /** 在指定 ID 列表中搜索 ML Kit 标签 */
+    @Query("SELECT * FROM media_assets WHERE id IN (:ids) AND mlKitLabels LIKE '%' || :keyword || '%'")
+    suspend fun searchMlKitLabelsInIds(ids: List<Long>, keyword: String): List<MediaEntity>
+
+    /** 在指定 ID 列表中搜索 OCR */
+    @Query("SELECT * FROM media_assets WHERE id IN (:ids) AND ocrText LIKE '%' || :keyword || '%'")
+    suspend fun searchOcrInIds(ids: List<Long>, keyword: String): List<MediaEntity>
+
+    /** 在指定 ID 列表中搜索文件名 */
+    @Query("SELECT * FROM media_assets WHERE id IN (:ids) AND fileName LIKE '%' || :keyword || '%'")
+    suspend fun searchFileNameInIds(ids: List<Long>, keyword: String): List<MediaEntity>
 }
 
 data class FaceGroupCount(
