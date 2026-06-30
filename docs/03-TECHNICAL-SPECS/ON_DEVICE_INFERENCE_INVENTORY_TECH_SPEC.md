@@ -43,14 +43,14 @@ PicMe（觅影相册）当前在端侧同时运行 **7 套推理框架**、**14+
 | 人脸检测（默认） | **MediaPipe Face Landmarker** 468 点 | 输出 468 点 → 映射为 106 点 | 相机页初始化 | 首选路径，零拷贝 `ImageProxy` |
 | 人脸检测（备选 1） | **MNN RetinaFace det_500m** + **2D106 landmark** | ROI + 106 点 | 相机页初始化 | OpenCL GPU 优先 |
 | 人脸检测（备选 2） | **NCNN RetinaFace det_500m** + **2D106 landmark** | ROI + 106 点 | 相机页初始化 | Vulkan GPU，NV21 零拷贝路径 |
-| 语音唤醒词 | **WakeWordEngine**（当前为 VAD + ASR 转录 + 文本匹配） | 检测 "小觅" 等唤醒词 | 相机页常驻监听 | Phase 2 计划迁移到 Sherpa-ONNX KWS |
+| 语音唤醒词 | **KwakeWordKwsEngine**（Sherpa-ONNX KeywordSpotter） | 检测 "小觅" 等唤醒词 | 相机页常驻监听 | Sherpa-ONNX KWS 已落地；VAD+ASR 方案保留为 KWS 不可用时回退 |
 | 语音指令识别 | **Sherpa-ONNX Zipformer ASR** (INT8) | 唤醒后转录指令 | 唤醒后按需加载 | 与 LLM 分时复用 |
 | Agent 指令执行 | **Remote LLM**（默认）/ **Qwen3.5-2B-MNN**（本地降级） | 解析并执行语音/文字指令 | 跨页面保活 | 默认远程优先策略 |
 
 **当前方案问题**：
 - 人脸检测三引擎并存，配置复杂；`FaceDetectorManager` 在 `updatePipelineConfig()` 前返回 `null` 导致静默失败。
 - `MnnRoiDetector`/`NcnnRoiDetector` 写死 `requireGpu=true`，GPU 初始化失败时无 CPU 降级路径。
-- 语音唤醒当前使用 282MB ASR 模型做文本匹配，延迟高、功耗大；KWS 迁移方案已规划但未完全落地。
+- 语音唤醒已迁移到 Sherpa-ONNX KWS（~14MB INT8），相机页常驻监听；原 VAD+ASR 文本匹配方案保留为 KWS 模型缺失时的回退。
 
 ### 3.2 拍照/图片编辑页
 
@@ -121,7 +121,7 @@ PicMe（觅影相册）当前在端侧同时运行 **7 套推理框架**、**14+
 | 模型 | 引擎 | 大小 | 量化 | 用途 |
 |------|------|------|------|------|
 | **Sherpa-ONNX Zipformer 中英双语 ASR** | ONNX Runtime / Sherpa-ONNX | 280MB | **INT8** | 流式语音识别 |
-| **Sherpa-ONNX KWS Zipformer** | ONNX Runtime / Sherpa-ONNX | 14MB | **INT8** | 唤醒词检测（规划中） |
+| **Sherpa-ONNX KWS Zipformer** | ONNX Runtime / Sherpa-ONNX | 14MB | **INT8** | 唤醒词检测（已落地） |
 
 ### 4.3 人脸模型
 
@@ -260,8 +260,8 @@ PicMe（觅影相册）当前在端侧同时运行 **7 套推理框架**、**14+
 13. **ML Kit 英文标签与 Qwen 中文标签混用**
     - `MetadataExtractor` 输出英文标签（如 "Outdoor"），Qwen 输出中文标签（如 "户外"），`LIKE` 搜索无法跨语言命中，依赖 LLM Agent 做同义词扩展。
 
-14. **WakeWord 当前方案低效**
-    - 当前使用 VAD + 282MB ASR 转录 + 文本匹配实现唤醒，延迟 800-1000ms、功耗高；KWS 专用 14MB 模型方案已规划（`KWS_MIGRATION_TECH_SPEC.md`）但未完全落地。
+14. **WakeWord 当前方案低效（已部分解决）**
+    - KWS 已迁移到 Sherpa-ONNX KeywordSpotter（~14MB INT8），相机页默认启用低功耗唤醒；原 VAD+ASR 方案仅在 KWS 模型不可用时回退。
 
 ---
 
@@ -280,7 +280,7 @@ PicMe（觅影相册）当前在端侧同时运行 **7 套推理框架**、**14+
 
 | 优化项 | 收益 | 优先级 |
 |--------|------|--------|
-| 完成 Sherpa-ONNX KWS 迁移 | 唤醒功耗 ↓ 80%，延迟 ↓ 60% | P0 |
+| ~~完成 Sherpa-ONNX KWS 迁移~~ | 唤醒功耗 ↓ 80%，延迟 ↓ 60% | 已完成 |
 | TAG Pass 3 照片去重（dHash） | 减少 30-50% Qwen 调用 | P1 |
 | TAG Bitmap 复用 | 减少二次解码 | P1 |
 | MobileCLIP 向量量化/PQ 或 HNSW | 大图库搜索加速 | P2 |
@@ -308,7 +308,7 @@ PicMe（觅影相册）当前在端侧同时运行 **7 套推理框架**、**14+
 | TAG Pass 3 Qwen | ~2-8s | 物理瓶颈 | ⚠️ |
 | 本地 LLM 运行时内存 | < 2GB | ~4.2GB (2B FP16) | ❌ |
 | 相机+LLM 共存 | 不 OOM | 高性能手机也被 LMK Kill | ❌ |
-| ASR 唤醒延迟 | < 100ms (KWS) | 800-1000ms (当前 ASR 方案) | ❌ |
+| ASR 唤醒延迟 | < 100ms (KWS) | ~50ms (Sherpa-ONNX KWS) | ✅ |
 
 ---
 

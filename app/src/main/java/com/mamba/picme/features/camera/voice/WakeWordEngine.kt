@@ -272,24 +272,18 @@ class WakeWordEngine(
      * 从转录文本中查找匹配的唤醒词变体并返回匹配分数
      *
      * 【匹配策略】：
-     * - 按 confidence 分数降序遍历
-     * - 返回第一个匹配的词 + 对应的 confidence
-     * - 分数用于日志和未来的策略调整
+     * - 优先匹配最长唤醒词变体，避免"小觅"提前吞掉"嘿小觅"等前缀变体
+     * - 长度相同时按 confidence 分数降序选择
+     * - 返回匹配到的词 + 对应的 confidence
      *
      * @param transcript ASR 原始转录文本
      * @return Pair<唤醒词, confidence> 或 null 如果无匹配
      */
     internal fun findMatchedWakeWordWithScore(transcript: String): Pair<String, Float>? {
-        // 按 confidence 分数排序，优先级高的先匹配
-        val sortedVariants = WAKE_WORD_VARIANTS.entries
-            .sortedByDescending { it.value }
-
-        for ((variant, confidence) in sortedVariants) {
-            if (transcript.contains(variant)) {
-                return Pair(variant, confidence)
-            }
-        }
-        return null
+        return WAKE_WORD_VARIANTS.entries
+            .filter { transcript.contains(it.key) }
+            .maxByOrNull { it.key.length * 1000 + (it.value * 100).toInt() }
+            ?.let { Pair(it.key, it.value) }
     }
 
     /**

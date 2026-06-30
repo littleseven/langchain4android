@@ -276,17 +276,18 @@ val screenY = adjustedY * previewHeight
 - 新版：`ModalBottomSheet` 设计的 `AiChatScreen`，支持折叠/展开
 - 通过 `CameraAgentIntegration` 统一消息状态管理
 
-### 2.8 语音控制集成（2026-05 新增，2026-06 耳机模式适配）
+### 2.8 语音控制集成（2026-05 新增，2026-06 耳机模式适配，2026-06 KWS 迁移）
 
 **VoiceCommandCoordinator**
 - 在 `CameraScreen` 中通过 `remember { VoiceCommandCoordinator(...) }` 创建
 - 支持双模式切换：`PUSH_TO_TALK` / `WAKE_WORD`
 - 声控开关状态与对话历史同步（`UserPreferencesRepository`）
 
-**WakeWordEngine**
-- 仅在相机预览可见时运行，页面退出自动停止
-- VAD 阈值：40dB（`VadDetector` 默认值），最小语音时长：100ms
-- 检测到语音后自动触发 ASR → LLM 解析 → 命令执行
+**KwakeWordKwsEngine（Sherpa-ONNX KWS）**
+- 相机预览可见时运行，页面退出自动停止
+- 使用 Sherpa-ONNX `KeywordSpotter` 实现 always-on 低功耗唤醒词检测（~14MB INT8）
+- 检测到唤醒词后触发 ASR → LLM 解析 → 命令执行
+- KWS 模型不可用时回退到原 `WakeWordEngine`（VAD + ASR 文本匹配）
 
 **耳机模式适配（2026-06 新增）**
 - 自动检测音频输入设备优先级：**蓝牙耳机 SCO > 有线耳机 > 内置麦克风**
@@ -295,7 +296,7 @@ val screenY = adjustedY * previewHeight
   - 有线耳机：使用 `MIC` 音源，关闭 AEC（耳机通常自带），启用 NS，增益 0.9
   - 内置麦克风：使用 `VOICE_COMMUNICATION` 音源，启用 AEC + NS，增益 1.0
 - 输入增益在 `read()` / `readShortArray()` / `readSegment()` 中实时应用，防止蓝牙耳机麦克风过驱动导致削波
-- 所有语音入口（`PushToTalkEngine`、`WakeWordEngine`、`SherpaMnnAsrEngine` 流式识别）统一通过 `context` 传入 `AudioRecorder`，确保耳机模式全局生效
+- 所有语音入口（`PushToTalkEngine`、`KwakeWordKwsEngine`、`SherpaOnnxAsrEngine` 流式识别）统一通过 `context` 传入 `AudioRecorder`，确保耳机模式全局生效
 - 蓝牙 SCO 生命周期：录音启动时 `startBluetoothSco()` + `MODE_IN_COMMUNICATION`，停止时恢复 `MODE_NORMAL`
 
 **语音命令反馈**

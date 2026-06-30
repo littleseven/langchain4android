@@ -77,8 +77,8 @@ object MnnGlobalReleaseLock {
  * 解决 LLM (MNN::Transformer::Llm) 与人脸检测 (MNN::Interpreter 备选路径)
  * 共享 libMNN.so 时的全局状态冲突和内存压力问题。
  *
- * 注意：sherpa-onnx 迁移后，ASR/KWS 使用 ONNX Runtime，不再依赖 MNN。
- * ASR 相关 API 已全部移除。
+ * 注意：sherpa-onnx 迁移后，ASR/KWS 已使用 ONNX Runtime，不再依赖 MNN。
+ * 当前本管理器仅协调 LLM 与 MNN 人脸检测（备选路径）的生命周期。
  *
  * 核心策略：
  * 1. 引用计数：LLM、FaceDetection 分别持有独立引用

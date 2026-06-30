@@ -1,10 +1,11 @@
 # PicMe KWS 唤醒词 + 语音栈迁移技术方案
 
 > **文档编号**: TECH-SPEC-KWS-001
-> **关联模块**: `agent-core/platform/voice/`、`agent-core/platform/mnn/`、`app/features/camera/voice/`
+> **关联模块**: `runtime-core/platform/voice/`、`runtime-core/platform/mnn/`、`app/features/camera/voice/`
 > **创建日期**: 2026-06-10
+> **状态**: 已落地（代码实现完成，单元测试通过）
 > **目标架构**: sherpa-onnx.aar 统一语音栈（KWS always-on + ASR on-demand + LLM 独立 MNN）
-> **当前架构**: sherpa-mnn-jni 耦合 MNN（ASR/LLM/FaceDetect 共享 libMNN.so）
+> **当前架构**: sherpa-onnx.aar 统一语音栈（ASR/KWS 已迁移至 ONNX Runtime，不再依赖 libMNN.so）
 
 ---
 
