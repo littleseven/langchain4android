@@ -25,6 +25,7 @@ import com.mamba.picme.data.preferences.UserPreferencesRepository
 import com.mamba.picme.data.repository.MediaRepositoryImpl
 import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.domain.repository.UserSettingsRepository
+import com.mamba.picme.domain.search.ExplicitFirstSearchPipeline
 import com.mamba.picme.domain.search.MediaSearchEngine
 import com.mamba.picme.domain.search.QueryBuilder
 import com.mamba.picme.domain.search.SemanticSearchEngine
@@ -146,6 +147,11 @@ class AppContainerImpl(
         )
     }
 
+    /** 显式约束优先搜索管道 */
+    private val explicitFirstSearchPipeline: ExplicitFirstSearchPipeline by lazy {
+        ExplicitFirstSearchPipeline(mediaDao = database.mediaDao())
+    }
+
     /** 媒体搜索引擎（自然语言图片搜索） */
     override val mediaSearchEngine: MediaSearchEngine by lazy {
         MediaSearchEngine(
@@ -155,7 +161,8 @@ class AppContainerImpl(
             locationDao = database.locationDao(),
             userSettingsRepository = userPreferencesRepository,
             tagTranslator = TagTranslator(BilingualVocab.loadFromAssets(context)),
-            semanticSearchEngine = semanticSearchEngine
+            semanticSearchEngine = semanticSearchEngine,
+            explicitFirstPipeline = explicitFirstSearchPipeline
         )
     }
 

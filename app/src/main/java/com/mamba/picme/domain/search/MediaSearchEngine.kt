@@ -36,7 +36,8 @@ class MediaSearchEngine(
     private val locationDao: LocationDao? = null,
     private val userSettingsRepository: UserSettingsRepository? = null,
     private val tagTranslator: TagTranslator = TagTranslator(BilingualVocab.empty()),
-    private val semanticSearchEngine: SemanticSearchEngine? = null
+    private val semanticSearchEngine: SemanticSearchEngine? = null,
+    private val explicitFirstPipeline: ExplicitFirstSearchPipeline? = null
 ) {
     /**
      * 执行搜索（三层混合检索）
@@ -54,6 +55,15 @@ class MediaSearchEngine(
         if (query.isBlank()) return SearchResult(emptyList(), query)
 
         val uiLang = userSettingsRepository?.getAppLanguageBlocking() ?: AppLanguage.CHINESE
+
+        // Layer 0.5: 显式约束优先分段搜索（如"去年3月在室内小孩"）
+        val segmentedQuery = QuerySegmenter().segment(query)
+        if (segmentedQuery.hasExplicit && explicitFirstPipeline != null) {
+            val explicitResults = explicitFirstPipeline.search(segmentedQuery)
+            if (explicitResults.media.isNotEmpty()) {
+                return SearchResult(explicitResults.media, query)
+            }
+        }
 
         // Layer 1: 规则匹配
         val filter = QueryParser.parse(query, uiLang)
