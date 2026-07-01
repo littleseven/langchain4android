@@ -1,9 +1,10 @@
-# PicMe 1.0.4 Release Notes
+# PicMe 1.0.5 Release Notes
 
-> **版本**: 1.0.4  
-> **versionCode**: 10004（建议发布前在 `app/build.gradle.kts` 中确认并递增）  
+> **版本**: 1.0.5  
+> **versionCode**: 10005（建议发布前在 `app/build.gradle.kts` 中确认并递增）  
 > **发布日期**: 2026-06-30  
-> **适用平台**: Google Play（Android arm64-v8a，minSdk 24）
+> **适用平台**: Google Play（Android arm64-v8a，minSdk 24）  
+> **说明**: 本版本包含 v1.0.4 全部功能；版本号递增至 1.0.5 以符合 Google Play 发布要求。
 
 ---
 
@@ -12,7 +13,7 @@
 ### 简体中文 (zh-CN)
 
 ```
-PicMe 1.0.4 更新：
+PicMe 1.0.5 更新：
 - 全新自然语言相册搜索：说“五月的照片”“海边的合照”即可找到照片。
 - 搜索结果支持长按多选、批量删除与分享。
 - TAG 生成增强：新增 ML Kit 标签 Pass，430+ 英文标签已映射中文，搜索更准。
@@ -23,7 +24,7 @@ PicMe 1.0.4 更新：
 ### 英文 (en-US)
 
 ```
-PicMe 1.0.4:
+PicMe 1.0.5:
 - New natural-language gallery search: find photos by saying "photos from May" or "group photo by the sea".
 - Search results now support long-press multi-select, batch delete and share.
 - Improved TAG generation with ML Kit label pass and 430+ EN→CN label mappings.
@@ -34,7 +35,7 @@ PicMe 1.0.4:
 ### 繁体中文 (zh-TW)
 
 ```
-PicMe 1.0.4 更新：
+PicMe 1.0.5 更新：
 - 全新自然語言相簿搜尋：說「五月的照片」「海邊的合照」即可找到照片。
 - 搜尋結果支援長按多選、批次刪除與分享。
 - TAG 生成增強：新增 ML Kit 標籤 Pass，430+ 英文標籤已對應中文，搜尋更準。
@@ -94,7 +95,7 @@ PicMe 1.0.4 更新：
 
 ## 发布检查清单
 
-- [ ] 更新 `app/build.gradle.kts` 中 `versionCode` 为 `10004`，`versionName` 为 `"1.0.4"`
+- [ ] 更新 `app/build.gradle.kts` 中 `versionCode` 为 `10005`，`versionName` 为 `"1.0.5"`
 - [ ] 运行 `./gradlew :app:bundleRelease` 生成 AAB
 - [ ] 在 Google Play Console 上传 AAB
 - [ ] 填写 zh-CN / en-US / zh-TW 三语 Release Note
