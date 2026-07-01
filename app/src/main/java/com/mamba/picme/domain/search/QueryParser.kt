@@ -121,11 +121,39 @@ object QueryParser {
     }
 
     /**
-     * 从"年"后面的字符串解析月份数字，如"3月""12月""3月的照片"
+     * 从"年"后面的字符串解析月份，支持阿拉伯和中文数字，如"3月""12月""五月"
      */
     private fun parseMonthAfterYear(afterYear: String): Int? {
-        val monthMatch = Regex("""^(\d{1,2})月""").find(afterYear)
-        return monthMatch?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 12)
+        val arabicMatch = Regex("""^(\d{1,2})月""").find(afterYear)
+        if (arabicMatch != null) {
+            return arabicMatch.groupValues[1].toIntOrNull()?.coerceIn(1, 12)
+        }
+        val chineseMatch = Regex("""^([一二三四五六七八九十]{1,3})月""").find(afterYear)
+        return chineseMatch?.groupValues?.get(1)?.let(::chineseMonthToInt)
+    }
+
+    /**
+     * 解析独立中文月份，如"五月""十一月"
+     */
+    private fun parseStandaloneChineseMonth(query: String): TimeRange? {
+        val match = Regex("""^([一二三四五六七八九十]{1,3})月""").find(query)
+        val month = match?.groupValues?.get(1)?.let(::chineseMonthToInt) ?: return null
+        return TimeRange(
+            startMs = monthStartMs(currentYear, month - 1),
+            endMs = monthEndMs(currentYear, month - 1)
+        )
+    }
+
+    /**
+     * 中文月份转数字：一→1，十一→11，十二→12
+     */
+    private fun chineseMonthToInt(text: String): Int? {
+        val map = mapOf(
+            "一" to 1, "二" to 2, "三" to 3, "四" to 4, "五" to 5,
+            "六" to 6, "七" to 7, "八" to 8, "九" to 9, "十" to 10,
+            "十一" to 11, "十二" to 12
+        )
+        return map[text]
     }
 
     private fun monthStartMs(year: Int, month: Int): Long {
@@ -162,6 +190,10 @@ object QueryParser {
 
         val absoluteYearMonth = parseAbsoluteYearMonth(query)
         if (absoluteYearMonth != null) return absoluteYearMonth
+
+        // 1.5 独立中文月份：五月 / 十一月
+        val standaloneChineseMonth = parseStandaloneChineseMonth(query)
+        if (standaloneChineseMonth != null) return standaloneChineseMonth
 
         // 2. 整年：去年 / 今年 / 前年 / 2024年
         val yearMatch = Regex("(\\d{4})年").find(query)

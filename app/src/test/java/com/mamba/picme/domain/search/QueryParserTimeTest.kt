@@ -92,4 +92,37 @@ class QueryParserTimeTest {
         cal.timeInMillis = range!!.startMs
         assertEquals(Calendar.MONDAY, cal.get(Calendar.DAY_OF_WEEK))
     }
+
+    @Test
+    fun `parse chinese month may`() {
+        QueryParser.currentYear = 2025
+        QueryParser.currentMonth = 6
+
+        val range = QueryParser.parseTimeRange("五月")
+        assertNotNull(range)
+
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = range!!.startMs
+        assertEquals(2025, cal.get(Calendar.YEAR))
+        assertEquals(4, cal.get(Calendar.MONTH))
+
+        cal.timeInMillis = range.endMs
+        assertEquals(2025, cal.get(Calendar.YEAR))
+        assertEquals(4, cal.get(Calendar.MONTH))
+        assertEquals(31, cal.get(Calendar.DAY_OF_MONTH))
+    }
+
+    @Test
+    fun `parse last year chinese month may`() {
+        QueryParser.currentYear = 2025
+        QueryParser.currentMonth = 6
+
+        val range = QueryParser.parseTimeRange("去年五月")
+        assertNotNull(range)
+
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = range!!.startMs
+        assertEquals(2024, cal.get(Calendar.YEAR))
+        assertEquals(4, cal.get(Calendar.MONTH))
+    }
 }

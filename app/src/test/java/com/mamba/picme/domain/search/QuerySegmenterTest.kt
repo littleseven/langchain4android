@@ -24,6 +24,31 @@ class QuerySegmenterTest {
     }
 
     @Test
+    fun `segment splits chinese month may photo`() {
+        val segmenter = QuerySegmenter()
+        val result = segmenter.segment("五月的照片")
+
+        assertEquals(
+            listOf(
+                Segment(SegmentType.TIME, "五月"),
+                Segment(SegmentType.UNKNOWN, "照片")
+            ),
+            result.segments
+        )
+    }
+
+    @Test
+    fun `segment splits last year chinese month may`() {
+        val segmenter = QuerySegmenter()
+        val result = segmenter.segment("去年五月")
+
+        assertEquals(
+            listOf(Segment(SegmentType.TIME, "去年五月")),
+            result.segments
+        )
+    }
+
+    @Test
     fun `segment splits beijing park child`() {
         val segmenter = QuerySegmenter()
         val result = segmenter.segment("北京公园里的小孩")
