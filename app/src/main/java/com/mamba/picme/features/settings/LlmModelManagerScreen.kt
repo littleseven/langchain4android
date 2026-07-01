@@ -216,9 +216,11 @@ fun ModelCenterScreen(
                     items(currentModels) { model ->
                         val downloadState = downloadStates[model.id]
                         val isPaused = downloadState?.status == DownloadStatus.PAUSED
+                        val isDownloaded = model.id in downloadedIds
                         ModelCardWithBadge(
                             model = model,
                             downloadState = downloadState,
+                            isDownloaded = isDownloaded,
                             tagTranslations = tagTranslations,
                             onDownload = {
                                 if (isPaused) {
@@ -445,6 +447,7 @@ internal fun getTagColor(tag: String): Color {
 internal fun ModelCardWithBadge(
     model: ModelConfig,
     downloadState: DownloadState?,
+    isDownloaded: Boolean = false,
     tagTranslations: Map<String, String>,
     onDownload: () -> Unit,
     onCancel: () -> Unit,
@@ -542,6 +545,7 @@ internal fun ModelCardWithBadge(
                 // 右侧：操作按钮
                 ModelActionButton(
                     downloadState = downloadState,
+                    isDownloaded = isDownloaded,
                     isDownloading = isDownloading,
                     isPaused = isPaused,
                     onDownload = onDownload,
@@ -652,6 +656,7 @@ internal fun RequiredBadge() {
 @Composable
 internal fun ModelActionButton(
     downloadState: DownloadState?,
+    isDownloaded: Boolean = false,
     isDownloading: Boolean,
     isPaused: Boolean,
     onDownload: () -> Unit,
@@ -661,6 +666,20 @@ internal fun ModelActionButton(
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         when {
+            isDownloaded && downloadState == null -> {
+                // 已下载且无活跃下载状态：显示已下载图标
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = stringResource(R.string.model_downloaded),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
             isDownloading -> {
                 // 下载中：显示暂停和取消按钮
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -1,10 +1,17 @@
 package com.mamba.picme.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.mamba.picme.agent.core.model.context.MediaType
 
-@Entity(tableName = "media_assets")
+@Entity(
+    tableName = "media_assets",
+    indices = [
+        Index("captureDate"),
+        Index("hasFace")
+    ]
+)
 data class MediaEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

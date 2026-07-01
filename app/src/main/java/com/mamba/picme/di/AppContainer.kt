@@ -167,13 +167,14 @@ class AppContainerImpl(
         )
     }
 
-    /** 媒体搜索引擎（自然语言图片搜索） */
+    /** 媒体搜索引擎（自然语言图片搜索，FTS5 加速） */
     override val mediaSearchEngine: MediaSearchEngine by lazy {
         MediaSearchEngine(
             mediaDao = database.mediaDao(),
             tagDao = database.tagDao(),
             ocrWordDao = database.ocrWordDao(),
             locationDao = database.locationDao(),
+            ftsSearchDao = database.ftsSearchDao(),
             userSettingsRepository = userPreferencesRepository,
             tagTranslator = TagTranslator(bilingualVocab, opusMtTranslator, controlledVocab),
             semanticSearchEngine = semanticSearchEngine,

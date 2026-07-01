@@ -32,6 +32,10 @@ class ModelDownloadForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // startForegroundService() 要求必须在 5 秒内调用 startForeground()，
+        // 因此无论什么 action 都先立即调用，再处理具体逻辑
+        startForeground(NOTIFICATION_ID, buildEmptyNotification())
+
         when (intent?.action) {
             ACTION_STOP -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -39,10 +43,7 @@ class ModelDownloadForegroundService : Service() {
             }
 
             ACTION_START_OR_UPDATE -> {
-                // Android 要求 startForegroundService() 后必须在 5 秒内调用 startForeground()
-                // 因此先立即启动前台通知，再进行任何 I/O 操作，避免 ForegroundServiceDidNotStartInTimeException
-                startForeground(NOTIFICATION_ID, buildEmptyNotification())
-
+                // 更新通知为真实下载进度
                 val states = manager.snapshotDownloadingStates()
                 if (states.isEmpty()) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -53,11 +54,6 @@ class ModelDownloadForegroundService : Service() {
                 // 更新通知为真实下载进度
                 val nm = getSystemService(NotificationManager::class.java)
                 nm.notify(NOTIFICATION_ID, buildNotification(states))
-            }
-
-            else -> {
-                // 默认情况下也立即调用 startForeground()，防止崩溃
-                startForeground(NOTIFICATION_ID, buildEmptyNotification())
             }
         }
 

@@ -5,11 +5,13 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.mamba.picme.data.model.MediaEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MediaDao {
+    @Transaction
     @Query("SELECT * FROM media_assets ORDER BY captureDate DESC")
     fun getAllMedia(): Flow<List<MediaEntity>>
 

@@ -82,7 +82,9 @@ class SemanticSearchEngineTest {
         every { mobileClipEngine.cosineSimilarity(any(), any()) } returns 0.8f
 
         // DAO 返回该候选（这是核心：它会被 filter.keywords 排除，但语义层应保留）
-        coEvery { mediaDao.getMediaWithSemanticEmbedding() } returns listOf(entity)
+        // 使用 ID-based 方法避免 OOM
+        coEvery { mediaDao.getMediaWithSemanticEmbeddingIds() } returns listOf(1L)
+        coEvery { mediaDao.getMediaByIds(listOf(1L)) } returns listOf(entity)
 
         val engine = SemanticSearchEngine(
             context = context,

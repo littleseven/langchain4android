@@ -38,7 +38,7 @@ import com.mamba.picme.data.model.MediaEntity
         MediaLocationEntity::class,
         TagScanTaskEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -64,7 +64,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "picme_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                 INSTANCE = instance
                 instance
@@ -155,6 +155,37 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL(
                     "ALTER TABLE `media_assets` ADD COLUMN `mlKitLabelsZh` TEXT"
                 )
+            }
+        }
+
+        /**
+         * Migration 7 → 8：性能优化
+         * 1. 添加 captureDate/hasFace 索引（清理旧命名 + 创建 Room 标准命名）
+         * 2. FTS5 虚拟表改为运行时惰性创建（避免 migration 中 DDL 异常导致 crash）
+         */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // 清理可能因上次 migration 回退残留的旧命名索引
+                // SQLite DDL 不参与事务回退，需要显式清理
+                try {
+                    database.execSQL("DROP INDEX IF EXISTS `idx_media_capture_date`")
+                } catch (_: Exception) { }
+                try {
+                    database.execSQL("DROP INDEX IF EXISTS `idx_media_has_face`")
+                } catch (_: Exception) { }
+
+                // 使用 Room 命名约定创建索引: index_<tableName>_<columnName>
+                // 名称必须与 @Entity(indices = [...]) 声明一致
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_media_assets_captureDate` ON `media_assets`(`captureDate`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_media_assets_hasFace` ON `media_assets`(`hasFace`)"
+                )
+
+                // FTS5 虚拟表不在此处创建，改为运行时惰性初始化（见 FtsHelper.ensureAvailable）
+                // 原因：部分设备系统 SQLite 未编译 FTS5，DDL 虽可 catch，
+                // 但 SQLiteLog 仍会输出 error 级别日志，造成日志噪音
             }
         }
     }

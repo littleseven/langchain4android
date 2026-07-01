@@ -260,13 +260,14 @@ fun MediaPager(
             }
     }
 
-    // [Bitmap 生命周期] 退出编辑时安全回收 Bitmap
-    // DisposableEffect 的 onDispose 在 Compose 停止渲染 processedBitmap 后执行
+    // [Bitmap 生命周期] 退出编辑时清理引用
+    // 注意：不在 Compose 渲染周期内 recycle Bitmap，避免 "trying to use a recycled bitmap" 崩溃。
+    // Bitmap 生命周期由 MediaViewModel 统一管理（preparePhotoEdit/processPhoto/clearPhotoEditState）。
     DisposableEffect(isEditing) {
         onDispose {
-            processedBitmap?.let { if (!it.isRecycled) it.recycle() }
-            loadedBitmap?.let { if (!it.isRecycled) it.recycle() }
-            Log.d("Gallery", "Recycled edit bitmaps after leaving edit mode")
+            processedBitmap = null
+            loadedBitmap = null
+            Log.d("Gallery", "Left edit mode, cleared bitmap references")
         }
     }
 

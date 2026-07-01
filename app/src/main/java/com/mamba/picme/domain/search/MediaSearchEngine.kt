@@ -2,6 +2,8 @@ package com.mamba.picme.domain.search
 
 import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.data.local.MediaDao
+import com.mamba.picme.data.local.dao.FtsHelper
+import com.mamba.picme.data.local.dao.FtsSearchDao
 import com.mamba.picme.data.local.dao.LocationDao
 import com.mamba.picme.data.local.dao.OcrWordDao
 import com.mamba.picme.data.local.dao.TagDao
@@ -11,6 +13,8 @@ import com.mamba.picme.domain.repository.UserSettingsRepository
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.domain.tag.i18n.BilingualVocab
 import com.mamba.picme.domain.tag.i18n.TagTranslator
+import java.util.Collections
+import java.util.LinkedHashMap
 import java.util.concurrent.TimeUnit
 import org.json.JSONException
 
@@ -34,11 +38,66 @@ class MediaSearchEngine(
     private val tagDao: TagDao? = null,
     private val ocrWordDao: OcrWordDao? = null,
     private val locationDao: LocationDao? = null,
+    private val ftsSearchDao: FtsSearchDao? = null,
     private val userSettingsRepository: UserSettingsRepository? = null,
     private val tagTranslator: TagTranslator = TagTranslator(BilingualVocab.empty()),
     private val semanticSearchEngine: SemanticSearchEngine? = null,
     private val explicitFirstPipeline: ExplicitFirstSearchPipeline? = null
 ) {
+
+    /** 翻译结果 LRU 缓存：避免重复搜索时反复做词表查找 + OPUS-MT 推理（~50ms） */
+    private val translationCache = object : LinkedHashMap<String, Set<String>>(
+        16, 0.75f, true
+    ) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Set<String>>?): Boolean {
+            return size > MAX_CACHE_SIZE
+        }
+    }
+
+    /** FTS5 惰性初始化标记（仅尝试一次） */
+    @Volatile
+    private var fts5InitAttempted: Boolean = false
+
+    /**
+     * 带缓存的搜索扩展：缓存 key = "$query|$uiLang"
+     */
+    private fun cachedExpandForSearch(query: String, uiLang: AppLanguage): Set<String> {
+        val key = "$query|$uiLang"
+        return translationCache.getOrPut(key) {
+            tagTranslator.expandForSearch(query, uiLang)
+        }
+    }
+
+    /**
+     * FTS5 惰性初始化：首次搜索时在后台线程创建虚拟表。
+     * 创建失败 → 标记不可用，后续静默回退 LIKE。
+     */
+    private suspend fun ensureFts5() {
+        if (fts5InitAttempted || ftsSearchDao == null) return
+        fts5InitAttempted = true
+        try {
+            ftsSearchDao!!.execRaw(
+                androidx.sqlite.db.SimpleSQLiteQuery(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS `media_fts` USING fts5(
+                        `labels`,
+                        `ocrText`,
+                        `locationName`,
+                        `fileName`,
+                        `mlKitLabels`,
+                        `mlKitLabelsZh`,
+                        content='media_assets',
+                        content_rowid='id'
+                    )
+                    """.trimIndent()
+                )
+            )
+            FtsHelper.isAvailable = true
+        } catch (e: Exception) {
+            FtsHelper.isAvailable = false
+        }
+    }
+
     /**
      * 执行搜索（三层混合检索）
      *
@@ -57,7 +116,7 @@ class MediaSearchEngine(
         val uiLang = userSettingsRepository?.getAppLanguageBlocking() ?: AppLanguage.CHINESE
 
         // Layer 0.5: 显式约束优先分段搜索（如"去年3月在室内小孩"）
-        val segmentedQuery = QuerySegmenter().segment(query)
+        val segmentedQuery = QuerySegmenter.segment(query)
         if (segmentedQuery.hasExplicit && explicitFirstPipeline != null) {
             val explicitResults = explicitFirstPipeline.search(segmentedQuery, uiLang)
             if (explicitResults.media.isNotEmpty()) {
@@ -97,7 +156,7 @@ class MediaSearchEngine(
         }
 
         // 回退：全字段模糊搜索 + 语义召回
-        val queryCandidates = tagTranslator.expandForSearch(query, uiLang)
+        val queryCandidates = cachedExpandForSearch(query, uiLang)
         val sqlResults = queryCandidates
             .flatMap { mediaDao.searchAll(it) }
             .map { it.toDomain() }
@@ -227,17 +286,26 @@ class MediaSearchEngine(
         resultMap: MutableMap<Long, MediaAsset>
     ) {
         for (keyword in keywords) {
-            val candidates = tagTranslator.expandForSearch(keyword, uiLang)
+            val candidates = cachedExpandForSearch(keyword, uiLang)
             for (candidate in candidates) {
                 searchByCandidate(candidate, resultMap)
             }
         }
     }
 
+    /**
+     * 按候选词搜索所有文本字段。
+     *
+     * 策略：
+     * 1. FTS5 优先（1 次查询覆盖 labels/ocrText/fileName/mlKitLabels/mlKitLabelsZh）
+     * 2. FTS5 不可用或失败 → 回退到 LIKE 查询
+     * 3. 辅助表（tags/ocr_words）始终独立查询
+     */
     private suspend fun searchByCandidate(
         candidate: String,
         resultMap: MutableMap<Long, MediaAsset>
     ) {
+        // 辅助表查询：tags 精确匹配 + OCR word 前缀
         if (tagDao != null) {
             tagDao.searchByExactTag(candidate).forEach { resultMap[it.id] = it.toDomain() }
         }
@@ -245,12 +313,50 @@ class MediaSearchEngine(
             ocrWordDao.searchByWordPrefix(candidate.lowercase()).forEach { resultMap[it.id] = it.toDomain() }
         }
 
+        // 主表文本字段查询：FTS5 优先（1 query），LIKE 回退（5 queries）
+        ensureFts5() // 惰性创建 FTS5 虚拟表（仅首次）
+        if (FtsHelper.isAvailable && ftsSearchDao != null) {
+            val ftsHit = tryFts5Search(candidate, resultMap)
+            if (ftsHit) return
+        }
+
+        // LIKE 回退：逐个字段搜索
+        searchByLikeFallback(candidate, resultMap)
+    }
+
+    /** 尝试 FTS5 搜索，返回 true 表示成功（即使 0 结果） */
+    private suspend fun tryFts5Search(
+        candidate: String,
+        resultMap: MutableMap<Long, MediaAsset>
+    ): Boolean {
+        // 惰性创建 FTS5 虚拟表（仅首次）
+        ensureFts5()
+        if (!FtsHelper.isAvailable) return false
+
+        return try {
+            val ftsResults = ftsSearchDao!!.searchFts(FtsHelper.searchQuery(candidate))
+            ftsResults.forEach { resultMap[it.id] = it.toDomain() }
+            true
+        } catch (e: Exception) {
+            // 查询失败 → 标记不可用，后续走 LIKE
+            FtsHelper.isAvailable = false
+            false
+        }
+    }
+
+    /** LIKE 回退搜索（FTS5 不可用时） */
+    private suspend fun searchByLikeFallback(
+        candidate: String,
+        resultMap: MutableMap<Long, MediaAsset>
+    ) {
         val labelResults = mediaDao.searchByLabel(candidate)
         val mlKitResults = mediaDao.searchByMlKitLabel(candidate)
         val mlKitZhResults = mediaDao.searchByMlKitLabelZh(candidate)
         val ocrResults = mediaDao.searchByOcrText(candidate)
         val nameResults = mediaDao.searchByFileName(candidate)
-        (labelResults + mlKitResults + mlKitZhResults + ocrResults + nameResults).forEach { resultMap[it.id] = it.toDomain() }
+        (labelResults + mlKitResults + mlKitZhResults + ocrResults + nameResults).forEach {
+            resultMap[it.id] = it.toDomain()
+        }
     }
 
     private suspend fun applyOcrKeywords(
@@ -282,7 +388,11 @@ class MediaSearchEngine(
         resultMap: MutableMap<Long, MediaAsset>
     ) {
         if (hasFaces != true) return
-        mediaDao.searchByHasFace().forEach { resultMap[it.id] = it.toDomain() }
+        // 使用 ID-based 方法避免 OOM（searchByHasFace 已废弃）
+        val ids = mediaDao.getHasFaceIds()
+        if (ids.isNotEmpty()) {
+            mediaDao.getMediaByIds(ids).forEach { resultMap[it.id] = it.toDomain() }
+        }
     }
 
     /**
@@ -434,7 +544,7 @@ Notes:
 
         // 规则无法解析 → 需要 LLM（测试页不触发 LLM，直接走兜底模糊搜索）
         val fallbackStart = System.currentTimeMillis()
-        val queryCandidates = tagTranslator.expandForSearch(query, uiLang)
+        val queryCandidates = cachedExpandForSearch(query, uiLang)
         val breakdown = mutableListOf<RecallDimension>()
         val resultMap = mutableMapOf<Long, Pair<MediaAsset, MutableSet<String>>>()
 
@@ -588,7 +698,7 @@ Notes:
         val start = System.currentTimeMillis()
         var count = 0
         for (keyword in keywords) {
-            val candidates = tagTranslator.expandForSearch(keyword, uiLang)
+            val candidates = cachedExpandForSearch(keyword, uiLang)
             for (candidate in candidates) {
                 val before = resultMap.size
                 searchByCandidateWithDiagnostics(candidate, resultMap)
@@ -658,10 +768,13 @@ Notes:
         if (hasFaces != true) return
         val start = System.currentTimeMillis()
         var count = 0
-        mediaDao.searchByHasFace().forEach { entity ->
-            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-            if (dims.add("has_face")) count++
-            resultMap[entity.id] = media to dims
+        val ids = mediaDao.getHasFaceIds()
+        if (ids.isNotEmpty()) {
+            mediaDao.getMediaByIds(ids).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                if (dims.add("has_face")) count++
+                resultMap[entity.id] = media to dims
+            }
         }
         breakdown.add(RecallDimension("Face", count, System.currentTimeMillis() - start))
     }
@@ -670,6 +783,7 @@ Notes:
         candidate: String,
         resultMap: MutableMap<Long, Pair<MediaAsset, MutableSet<String>>>
     ) {
+        // 辅助表查询
         if (tagDao != null) {
             tagDao.searchByExactTag(candidate).forEach { entity ->
                 val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
@@ -684,21 +798,41 @@ Notes:
                 resultMap[entity.id] = media to dims
             }
         }
-        mediaDao.searchByLabel(candidate).forEach { entity ->
-            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-            dims.add("label")
-            resultMap[entity.id] = media to dims
+
+        // 主表文本字段：FTS5 优先（惰性创建虚拟表）
+        ensureFts5()
+        val fts5Hit = FtsHelper.isAvailable && ftsSearchDao != null && try {
+            ftsSearchDao!!.searchFts(FtsHelper.searchQuery(candidate)).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("fts5")
+                resultMap[entity.id] = media to dims
+            }
+            true
+        } catch (e: Exception) {
+            FtsHelper.isAvailable = false
+            false
         }
-        mediaDao.searchByOcrText(candidate).forEach { entity ->
-            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-            dims.add("ocr")
-            resultMap[entity.id] = media to dims
+
+        // LIKE 回退
+        if (!fts5Hit) {
+            mediaDao.searchByLabel(candidate).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("label")
+                resultMap[entity.id] = media to dims
+            }
+            mediaDao.searchByOcrText(candidate).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("ocr")
+                resultMap[entity.id] = media to dims
+            }
+            mediaDao.searchByFileName(candidate).forEach { entity ->
+                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+                dims.add("file_name")
+                resultMap[entity.id] = media to dims
+            }
         }
-        mediaDao.searchByFileName(candidate).forEach { entity ->
-            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-            dims.add("file_name")
-            resultMap[entity.id] = media to dims
-        }
+
+        // ML Kit 标签（中英文）始终查询（FTS5 已覆盖，但诊断需要区分维度）
         mediaDao.searchByMlKitLabel(candidate).forEach { entity ->
             val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
             dims.add("mlkit_label")
@@ -754,6 +888,9 @@ Notes:
 
     companion object {
         private const val TAG = "MediaSearchEngine"
+
+        /** 翻译缓存最大条目数 */
+        private const val MAX_CACHE_SIZE = 64
 
         /** SQL 召回基础分权重（语义搜索优先，SQL 仅作辅助召回） */
         private const val SQL_SCORE_WEIGHT = 0.25f

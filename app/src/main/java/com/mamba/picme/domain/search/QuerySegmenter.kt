@@ -3,7 +3,7 @@ package com.mamba.picme.domain.search
 import com.mamba.picme.domain.model.TimeRange
 
 /**
- * 查询分词分段器
+ * 查询分词分段器（无状态全局单例）
  *
  * 把自然语言搜索查询切分为带类型的语义段。
  * 基于规则 + 词典实现，不引入外部模型。
@@ -11,38 +11,35 @@ import com.mamba.picme.domain.model.TimeRange
  * 词典优先级（高到低）：SCENE > LOCATION > OBJECT > ACTIVITY > OCR > PERSON
  * 当一个词同时出现在多个词典中时，按此优先级归类。
  */
-class QuerySegmenter(
-    private val locationVocab: Set<String> = SearchVocabulary.LOCATION,
-    private val personVocab: Set<String> = SearchVocabulary.PERSON,
-    private val sceneVocab: Set<String> = SearchVocabulary.SCENE,
-    private val objectVocab: Set<String> = SearchVocabulary.OBJECT,
-    private val ocrVocab: Set<String> = SearchVocabulary.OCR,
-    private val activityVocab: Set<String> = SearchVocabulary.ACTIVITY,
-    private val queryParser: QueryParser = QueryParser
-) {
+object QuerySegmenter {
 
-    companion object {
-        private const val MAX_SEGMENT_LENGTH = 8
+    private const val MAX_SEGMENT_LENGTH = 8
 
-        private val STOP_WORDS = setOf(
-            "的", "了", "在", "是", "我", "有", "和", "就", "不", "都", "一",
-            "把", "一个", "上面", "下面", "可以", "这个", "那个", "拍", "找", "搜索",
-            "显示", "查看", "包含", "给我", "帮我", "里", "中", "上", "下", "与", "及", "还有"
-        )
+    private val STOP_WORDS = setOf(
+        "的", "了", "在", "是", "我", "有", "和", "就", "不", "都", "一",
+        "把", "一个", "上面", "下面", "可以", "这个", "那个", "拍", "找", "搜索",
+        "显示", "查看", "包含", "给我", "帮我", "里", "中", "上", "下", "与", "及", "还有"
+    )
 
-        /** 中文月份数字（一～十二） */
-        private const val CHINESE_MONTH = "[一二三四五六七八九十]{1,3}"
+    private val locationVocab = SearchVocabulary.LOCATION
+    private val personVocab = SearchVocabulary.PERSON
+    private val sceneVocab = SearchVocabulary.SCENE
+    private val objectVocab = SearchVocabulary.OBJECT
+    private val ocrVocab = SearchVocabulary.OCR
+    private val activityVocab = SearchVocabulary.ACTIVITY
 
-        private val TIME_PATTERN = Regex(
-            "^(\\d{4}年\\d{1,2}月|\\d{4}年" + CHINESE_MONTH + "月"
-                + "|去年\\d{1,2}月|去年" + CHINESE_MONTH + "月"
-                + "|今年\\d{1,2}月|今年" + CHINESE_MONTH + "月"
-                + "|前年\\d{1,2}月|前年" + CHINESE_MONTH + "月"
-                + "|" + CHINESE_MONTH + "月"
-                + "|去年|今年|前年|上个月|本周|上周|今天|昨天|前天"
-                + "|春天|夏天|秋天|冬天)"
-        )
-    }
+    /** 中文月份数字（一～十二） */
+    private const val CHINESE_MONTH = "[一二三四五六七八九十]{1,3}"
+
+    private val TIME_PATTERN = Regex(
+        "^(\\d{4}年\\d{1,2}月|\\d{4}年" + CHINESE_MONTH + "月"
+            + "|去年\\d{1,2}月|去年" + CHINESE_MONTH + "月"
+            + "|今年\\d{1,2}月|今年" + CHINESE_MONTH + "月"
+            + "|前年\\d{1,2}月|前年" + CHINESE_MONTH + "月"
+            + "|" + CHINESE_MONTH + "月"
+            + "|去年|今年|前年|上个月|本周|上周|今天|昨天|前天"
+            + "|春天|夏天|秋天|冬天)"
+    )
 
     /**
      * 把查询切分为语义段
@@ -140,7 +137,7 @@ class QuerySegmenter(
             .filter { it.type == SegmentType.TIME }
             .joinToString("") { it.text }
         return if (timeText.isNotEmpty()) {
-            queryParser.parseTimeRange(timeText)
+            QueryParser.parseTimeRange(timeText)
         } else null
     }
 

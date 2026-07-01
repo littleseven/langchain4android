@@ -30,8 +30,7 @@ class ExplicitFirstSearchPipeline(
         segmentedQuery: SegmentedQuery,
         uiLang: AppLanguage = AppLanguage.CHINESE
     ): com.mamba.picme.domain.search.SearchResult {
-        val segmenter = QuerySegmenter()
-        val (explicit, content) = segmenter.toFilters(segmentedQuery)
+        val (explicit, content) = QuerySegmenter.toFilters(segmentedQuery)
         return search(explicit, content, uiLang)
     }
 

@@ -152,7 +152,11 @@ class QueryBuilder(
         deferredQueries: MutableList<kotlinx.coroutines.Deferred<List<MediaEntity>>>
     ) {
         if (hasFaces == true) {
-            deferredQueries += async { mediaDao.searchByHasFace() }
+            deferredQueries += async {
+                // 使用 ID-based 方法避免 OOM
+                val ids = mediaDao.getHasFaceIds()
+                if (ids.isNotEmpty()) mediaDao.getMediaByIds(ids) else emptyList()
+            }
         }
     }
 

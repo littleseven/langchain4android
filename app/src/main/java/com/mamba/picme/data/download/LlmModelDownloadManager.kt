@@ -571,6 +571,13 @@ fun isModelDownloaded(modelId: String): Boolean {
             return
         }
 
+        // 立即标记为下载中，让 UI 第一时间显示暂停按钮
+        val totalBytes = modelConfig?.size ?: 0
+        _downloadStates.update { current ->
+            current + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, 0, totalBytes))
+        }
+        updateServiceState()
+
         val job = managerScope.launch {
             try {
                 downloadModel(modelId, modelConfig).collect { progress ->
@@ -643,13 +650,14 @@ fun isModelDownloaded(modelId: String): Boolean {
     private fun updateServiceState() {
         val intent = Intent(appContext, ModelDownloadForegroundService::class.java)
         runCatching {
-            if (hasAnyRunningTask()) {
-                intent.action = ModelDownloadForegroundService.ACTION_START_OR_UPDATE
-                ContextCompat.startForegroundService(appContext, intent)
+            intent.action = if (hasAnyRunningTask()) {
+                ModelDownloadForegroundService.ACTION_START_OR_UPDATE
             } else {
-                intent.action = ModelDownloadForegroundService.ACTION_STOP
-                appContext.startService(intent)
+                ModelDownloadForegroundService.ACTION_STOP
             }
+            // 前台服务的所有后续 Intent 都必须使用 startForegroundService()，
+            // 否则在 API 34+ 上会导致 onStartCommand 无法正常执行
+            ContextCompat.startForegroundService(appContext, intent)
         }.onFailure { throwable ->
             Logger.w(TAG, "Failed to sync foreground service state", throwable)
         }

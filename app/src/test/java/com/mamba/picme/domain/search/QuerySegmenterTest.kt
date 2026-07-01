@@ -9,8 +9,7 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment splits last year march indoor child photo`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("去年3月在室内小孩的照片")
+        val result = QuerySegmenter.segment("去年3月在室内小孩的照片")
 
         assertEquals(
             listOf(
@@ -25,8 +24,7 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment splits chinese month may photo`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("五月的照片")
+        val result = QuerySegmenter.segment("五月的照片")
 
         assertEquals(
             listOf(
@@ -39,8 +37,7 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment splits last year chinese month may`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("去年五月")
+        val result = QuerySegmenter.segment("去年五月")
 
         assertEquals(
             listOf(Segment(SegmentType.TIME, "去年五月")),
@@ -50,8 +47,7 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment splits beijing park child`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("北京公园里的小孩")
+        val result = QuerySegmenter.segment("北京公园里的小孩")
 
         assertEquals(
             listOf(
@@ -65,8 +61,7 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment splits cat photo`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("猫的照片")
+        val result = QuerySegmenter.segment("猫的照片")
 
         assertEquals(
             listOf(
@@ -79,14 +74,12 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment returns empty for stop words only`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("的照片")
+        val result = QuerySegmenter.segment("的照片")
         assertTrue(result.isEmpty)
     }
 
     @Test
     fun `toFilters converts explicit and content segments`() {
-        val segmenter = QuerySegmenter()
         val segmented = SegmentedQuery(
             original = "去年3月在室内小孩",
             segments = listOf(
@@ -96,7 +89,7 @@ class QuerySegmenterTest {
             )
         )
 
-        val (explicit, content) = segmenter.toFilters(segmented)
+        val (explicit, content) = QuerySegmenter.toFilters(segmented)
 
         assertTrue(explicit.timeRange != null)
         assertEquals(listOf("室内"), explicit.locationKeywords)
@@ -107,21 +100,18 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment returns empty for empty or whitespace input`() {
-        val segmenter = QuerySegmenter()
-
-        val emptyResult = segmenter.segment("")
+        val emptyResult = QuerySegmenter.segment("")
         assertTrue(emptyResult.isEmpty)
         assertEquals(emptyList<Segment>(), emptyResult.segments)
 
-        val whitespaceResult = segmenter.segment("   ")
+        val whitespaceResult = QuerySegmenter.segment("   ")
         assertTrue(whitespaceResult.isEmpty)
         assertEquals(emptyList<Segment>(), whitespaceResult.segments)
     }
 
     @Test
     fun `segment splits sea sunset into scene segments`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("海边日落")
+        val result = QuerySegmenter.segment("海边日落")
 
         assertEquals(
             listOf(
@@ -134,8 +124,7 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment splits last week invoice screenshot`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("上周发票截图")
+        val result = QuerySegmenter.segment("上周发票截图")
 
         assertEquals(
             listOf(
@@ -149,8 +138,7 @@ class QuerySegmenterTest {
 
     @Test
     fun `segment splits dinner food with unknown filler`() {
-        val segmenter = QuerySegmenter()
-        val result = segmenter.segment("聚餐时拍的食物")
+        val result = QuerySegmenter.segment("聚餐时拍的食物")
 
         assertEquals(
             listOf(
@@ -163,24 +151,21 @@ class QuerySegmenterTest {
     }
 
     @Test
-    fun `custom vocab injection via constructor works`() {
-        val segmenter = QuerySegmenter(
-            locationVocab = setOf("自定义地点")
-        )
-        val result = segmenter.segment("自定义地点")
+    fun `segment uses default search vocabulary for scene object activity`() {
+        val result = QuerySegmenter.segment("自定义地点")
 
+        // "自定义地点" not in default location vocab → falls through to UNKNOWN
         assertEquals(
-            listOf(Segment(SegmentType.LOCATION, "自定义地点")),
+            listOf(Segment(SegmentType.UNKNOWN, "自定义地点")),
             result.segments
         )
     }
 
     @Test
     fun `toFilters hasFaces is null when no person segment`() {
-        val segmenter = QuerySegmenter()
-        val segmented = segmenter.segment("猫的照片")
+        val segmented = QuerySegmenter.segment("猫的照片")
 
-        val (explicit, _) = segmenter.toFilters(segmented)
+        val (explicit, _) = QuerySegmenter.toFilters(segmented)
 
         assertNull(explicit.hasFaces)
     }

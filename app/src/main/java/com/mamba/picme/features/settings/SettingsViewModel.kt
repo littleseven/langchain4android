@@ -421,6 +421,9 @@ private val ESSENTIAL_MODEL_IDS = listOf(
                         previousStatus != DownloadStatus.COMPLETED
 
                     if (justCompleted) {
+                        // 刷新已下载模型列表，确保 UI 计数（如必须模型缺失数）同步更新
+                        _downloadedModels.value = modelDownloadManager.getDownloadedModels()
+
                         val modelType = modelIdToDetectionType[modelId]
                         if (modelType != null) {
                             when {

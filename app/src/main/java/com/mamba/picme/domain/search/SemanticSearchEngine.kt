@@ -244,73 +244,103 @@ class SemanticSearchEngine(
     /**
      * 获取候选集（支持结构化过滤先缩小范围）
      *
-     * 策略：
-     * - 如果有结构化过滤（时间/地点/人脸），先 SQL 过滤
-     * - 否则返回全量有 semanticEmbedding 的照片
+     * 使用 ID-based 分页方式避免 OOM：
+     * - 大 gallery（10K+ 照片）不再一次性加载所有实体到内存
+     * - 通过 ID 列表 + 分批获取控制内存峰值
      */
     private suspend fun getCandidates(filter: StructuredFilter?): List<MediaEntity> {
         return if (filter != null) {
-            // 优先使用结构化过滤缩小候选集
-            // 注意：这里复用 MediaDao 的已有方法，组合过滤条件
             getFilteredCandidates(filter)
         } else {
-            // 全量有 embedding 的照片
-            mediaDao.getMediaWithSemanticEmbedding()
+            // 使用 ID-based 方式，防止大 gallery OOM
+            val ids = mediaDao.getMediaWithSemanticEmbeddingIds()
+            if (ids.isEmpty()) return emptyList()
+            mediaDao.getMediaByIds(ids)
         }
     }
 
     /**
-     * 根据结构化过滤条件获取候选集
+     * 根据结构化过滤条件获取候选集（ID-based + 分页）。
      *
      * 语义召回层必须尊重所有**结构化**过滤条件（时间/人脸/OCR/地点），
      * 否则无关图片可能因 CLIP 相似度偏高进入最终结果。
      *
      * 注意：[filter.keywords] 用于 SQL 标签/文件名搜索，在语义召回中**故意忽略**：
-     * 语义搜索的价值正是跨越标签词汇鸿沟，匹配标签里没有出现过的词（如英文 "woman" 对应中文标签）。
+     * 语义搜索的价值正是跨越标签词汇鸿沟，匹配标签里没有出现过的词。
      */
     private suspend fun getFilteredCandidates(filter: StructuredFilter): List<MediaEntity> {
-        // 1. 基础候选集：优先用时间范围缩小，否则取全量有 embedding 的
-        val candidates = if (filter.timeRange != null) {
-            mediaDao.searchByTimeRange(filter.timeRange.startMs, filter.timeRange.endMs)
-                .filter { !it.semanticEmbedding.isNullOrBlank() }
+        // 1. 基础候选集：优先用时间范围缩小，否则取全量有 embedding 的 ID
+        val candidateIds = if (filter.timeRange != null) {
+            mediaDao.getMediaIdsByTimeRange(filter.timeRange.startMs, filter.timeRange.endMs)
+                .toSet()
         } else {
-            mediaDao.getMediaWithSemanticEmbedding()
-        }.distinctBy { it.id }
+            mediaDao.getMediaWithSemanticEmbeddingIds().toSet()
+        }
 
-        if (candidates.isEmpty()) {
+        if (candidateIds.isEmpty()) {
             Log.d(TAG, "No semantic candidates after base filtering")
             return emptyList()
         }
 
-        // 2. 在候选集上应用结构化过滤（忽略 filter.keywords）
-        return candidates.filter { entity ->
-            // 人脸过滤
-            if (filter.hasFaces == true && !entity.hasFace) return@filter false
+        // 2. 结构化过滤：人脸/OCR/地点在 SQL 层面用 ID 过滤
+        val filteredIds = applyStructuredIdFilter(candidateIds, filter)
 
-            // OCR 关键词（硬性文本条件）
-            if (!filter.ocrKeywords.isNullOrEmpty()) {
-                val ocr = entity.ocrText.orEmpty().lowercase()
-                val matched = filter.ocrKeywords.any { keyword ->
-                    keyword.isNotBlank() && ocr.contains(keyword.lowercase())
-                }
-                if (!matched) return@filter false
+        if (filteredIds.isEmpty()) return emptyList()
+
+        // 3. 仅获取最终候选集（内存友好，避免加载全量实体）
+        return mediaDao.getMediaByIds(filteredIds.toList())
+            .filter { !it.semanticEmbedding.isNullOrBlank() }
+            .also {
+                Log.d(TAG, "Semantic candidate filter: base=${candidateIds.size}, " +
+                    "afterStructured=${it.size}, " +
+                    "ignoredKeywords=${filter.keywords}")
             }
+    }
 
-            // 地点关键词（硬性地理条件）
-            if (!filter.locationKeywords.isNullOrEmpty()) {
-                val location = entity.locationName.orEmpty().lowercase()
-                val matched = filter.locationKeywords.any { keyword ->
-                    keyword.isNotBlank() && location.contains(keyword.lowercase())
-                }
-                if (!matched) return@filter false
-            }
+    /**
+     * 在候选 ID 集上应用结构化过滤。
+     * 使用 ID-based 交集操作，避免在内存中过滤全量实体。
+     */
+    private suspend fun applyStructuredIdFilter(
+        candidateIds: Set<Long>,
+        filter: StructuredFilter
+    ): Set<Long> {
+        var result = candidateIds
 
-            true
-        }.also {
-            Log.d(TAG, "Semantic candidate filter: base=${candidates.size}, " +
-                "afterStructured=${it.size}, " +
-                "ignoredKeywords=${filter.keywords}")
+        // 人脸过滤
+        if (filter.hasFaces == true) {
+            val faceIds = mediaDao.getHasFaceIds().toSet()
+            result = result.intersect(faceIds)
+            if (result.isEmpty()) return emptySet()
         }
+
+        // OCR 关键词（SQL 层面过滤，不加载实体到内存）
+        if (!filter.ocrKeywords.isNullOrEmpty()) {
+            val ocrMatchedIds = mutableSetOf<Long>()
+            for (keyword in filter.ocrKeywords) {
+                if (keyword.isNotBlank()) {
+                    mediaDao.searchOcrInIds(result.toList(), keyword)
+                        .map { it.id }
+                        .forEach { ocrMatchedIds.add(it) }
+                }
+            }
+            result = result.intersect(ocrMatchedIds)
+            if (result.isEmpty()) return emptySet()
+        }
+
+        // 地点关键词（SQL 层面过滤）
+        if (!filter.locationKeywords.isNullOrEmpty()) {
+            val locMatchedIds = mutableSetOf<Long>()
+            for (keyword in filter.locationKeywords) {
+                if (keyword.isNotBlank()) {
+                    mediaDao.getMediaIdsByLocationKeyword(keyword)
+                        .forEach { locMatchedIds.add(it) }
+                }
+            }
+            result = result.intersect(locMatchedIds)
+        }
+
+        return result
     }
 
     /**
