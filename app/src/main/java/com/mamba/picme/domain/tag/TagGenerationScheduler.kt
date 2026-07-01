@@ -11,6 +11,7 @@ import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.data.local.entity.FaceEmbeddingEntity
 import com.mamba.picme.data.preferences.UserPreferencesRepository
 import com.mamba.picme.domain.repository.UserSettingsRepository
+import com.mamba.picme.domain.tag.i18n.MlKitLabelTranslator
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -100,6 +101,7 @@ class TagGenerationScheduler(
     private val vocab = ControlledVocab.loadFromAssets(context)
     private val normalizer = TagNormalizer(vocab)
     private val faceClusterEngine = FaceClusterEngine(context)
+    private val mlKitLabelTranslator = MlKitLabelTranslator.loadFromAssets(context)
 
     private val openClGuardian: OpenClGuardian by lazy {
         OpenClGuardian(
@@ -763,6 +765,10 @@ class TagGenerationScheduler(
 
         val labelsJson = MlKitTagExtractor.toJsonArray(labels)
         dao.updateMlKitLabels(entity.id, labelsJson)
+
+        // 同时存储中文翻译，使中文搜索可直接命中 ML Kit 标签
+        val labelsZhJson = mlKitLabelTranslator.translateToZhJson(labels)
+        dao.updateMlKitLabelsZh(entity.id, labelsZhJson)
 
         delay(getThrottleMs())
     }

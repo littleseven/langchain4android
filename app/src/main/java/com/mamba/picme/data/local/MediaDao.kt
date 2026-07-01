@@ -188,6 +188,10 @@ interface MediaDao {
     @Query("UPDATE media_assets SET mlKitLabels = :labels WHERE id = :mediaId")
     suspend fun updateMlKitLabels(mediaId: Long, labels: String)
 
+    /** 更新媒体的 ML Kit 中文翻译标签 */
+    @Query("UPDATE media_assets SET mlKitLabelsZh = :labels WHERE id = :mediaId")
+    suspend fun updateMlKitLabelsZh(mediaId: Long, labels: String)
+
     /** 重置所有 AI 标签（用于强制重新标记） */
     @Query("UPDATE media_assets SET labels = NULL")
     suspend fun resetAllLabels()
@@ -196,9 +200,17 @@ interface MediaDao {
     @Query("UPDATE media_assets SET mlKitLabels = NULL")
     suspend fun resetAllMlKitLabels()
 
-    /** 按 ML Kit 标签搜索 */
+    /** 重置所有 ML Kit 中文标签 */
+    @Query("UPDATE media_assets SET mlKitLabelsZh = NULL")
+    suspend fun resetAllMlKitLabelsZh()
+
+    /** 按 ML Kit 英文标签搜索 */
     @Query("SELECT * FROM media_assets WHERE mlKitLabels LIKE '%' || :label || '%' ORDER BY captureDate DESC")
     suspend fun searchByMlKitLabel(label: String): List<MediaEntity>
+
+    /** 按 ML Kit 中文标签搜索（中文用户直接命中） */
+    @Query("SELECT * FROM media_assets WHERE mlKitLabelsZh LIKE '%' || :label || '%' ORDER BY captureDate DESC")
+    suspend fun searchByMlKitLabelZh(label: String): List<MediaEntity>
 
     /** 未生成 ML Kit 标签的媒体 */
     @Deprecated("大数据量时易造成 Java Heap OOM，请优先使用 getUnlabeledMlKitMediaIds() / getUnlabeledMlKitMediaCount()")
@@ -356,9 +368,13 @@ interface MediaDao {
     @Query("SELECT * FROM media_assets WHERE id IN (:ids) AND labels LIKE '%' || :keyword || '%'")
     suspend fun searchLabelsInIds(ids: List<Long>, keyword: String): List<MediaEntity>
 
-    /** 在指定 ID 列表中搜索 ML Kit 标签 */
+    /** 在指定 ID 列表中搜索 ML Kit 英文标签 */
     @Query("SELECT * FROM media_assets WHERE id IN (:ids) AND mlKitLabels LIKE '%' || :keyword || '%'")
     suspend fun searchMlKitLabelsInIds(ids: List<Long>, keyword: String): List<MediaEntity>
+
+    /** 在指定 ID 列表中搜索 ML Kit 中文标签 */
+    @Query("SELECT * FROM media_assets WHERE id IN (:ids) AND mlKitLabelsZh LIKE '%' || :keyword || '%'")
+    suspend fun searchMlKitLabelsZhInIds(ids: List<Long>, keyword: String): List<MediaEntity>
 
     /** 在指定 ID 列表中搜索 OCR */
     @Query("SELECT * FROM media_assets WHERE id IN (:ids) AND ocrText LIKE '%' || :keyword || '%'")

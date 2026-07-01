@@ -38,7 +38,7 @@ import com.mamba.picme.data.model.MediaEntity
         MediaLocationEntity::class,
         TagScanTaskEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -64,7 +64,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "picme_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                 INSTANCE = instance
                 instance
@@ -142,6 +142,18 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL(
                     "ALTER TABLE `media_assets` ADD COLUMN `mlKitLabels` TEXT"
+                )
+            }
+        }
+
+        /**
+         * Migration 6 → 7：新增 media_assets.mlKitLabelsZh 字段
+         * 存储 ML Kit 英文标签对应的中文翻译，使中文搜索可直接命中 ML Kit 标签
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE `media_assets` ADD COLUMN `mlKitLabelsZh` TEXT"
                 )
             }
         }

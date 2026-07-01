@@ -3,14 +3,17 @@ package com.mamba.picme.domain.tag.i18n
 import android.content.Context
 import android.util.Log
 import com.mamba.picme.domain.model.AppLanguage
+import com.mamba.picme.domain.tag.ControlledVocab
 
 /**
  * 中文查询翻译器（专为 MobileCLIP 语义搜索优化）
  *
  * 采用分层翻译策略：
  * 1. **词表精确匹配**（零耗时）：通过 BilingualVocab 查找高频词
- * 2. **OPUS-MT 模型翻译**（~50ms）：词表未命中时，调用轻量 NMT 模型
- * 3. **保留原词兜底**：模型不可用时返回原查询
+ * 2. **受控词表同义词扩展**（零耗时）：通过 ControlledVocab 展开中文同义词并翻译
+ * 3. **CLIP 优化扩展表**（零耗时）：人工维护的高质量 CLIP 短语映射
+ * 4. **OPUS-MT 模型翻译**（~50ms）：词表未命中时，调用轻量 NMT 模型
+ * 5. **保留原词兜底**：模型不可用时返回原查询
  *
  * 设计目标：让中文用户搜索 "公园里的猫" 时，MobileCLIP 能收到 "cat in park"
  * 从而正确匹配到语义相近的图像。
@@ -18,11 +21,13 @@ import com.mamba.picme.domain.model.AppLanguage
  * @param context Application Context
  * @param vocab 双语词表（用于高频词快速匹配）
  * @param translator OPUS-MT 翻译引擎（可选注入）
+ * @param controlledVocab 受控词表（用于中文同义词动态扩展）
  */
 class ChineseQueryTranslator(
     private val context: Context,
     private val vocab: BilingualVocab = BilingualVocab.empty(),
-    private val translator: OpusMtTranslator? = null
+    private val translator: OpusMtTranslator? = null,
+    private val controlledVocab: ControlledVocab? = null
 ) {
     companion object {
         private const val TAG = "ChineseQueryTranslator"
@@ -38,10 +43,14 @@ class ChineseQueryTranslator(
         )
 
         /**
-         * MobileCLIP 语义搜索查询扩展表。
+         * MobileCLIP 语义搜索查询扩展表（人工维护的高质量映射）。
          * 关键：同一个中文概念可能对应多个英文表达，取最大相似度可提升召回。
+         *
+         * 维护策略：仅保留需要特殊 CLIP 短语优化的高频词。
+         * 通用词通过 ControlledVocab + translateForClip 动态扩展。
          */
         private val CLIP_QUERY_EXPANSIONS: Map<String, List<String>> = mapOf(
+            // 人物查询（需要 CLIP 特化的英文短语）
             "小孩" to listOf("child", "kid", "children", "young child"),
             "儿童" to listOf("child", "children", "young child"),
             "婴儿" to listOf("baby", "infant", "newborn"),
@@ -49,7 +58,6 @@ class ChineseQueryTranslator(
             "孩子" to listOf("child", "kid", "children"),
             "男孩" to listOf("boy", "little boy", "young boy"),
             "女孩" to listOf("girl", "little girl", "young girl"),
-            // 人物性别/年龄词：增强 MobileCLIP 对常见中文人物查询的召回
             "美女" to listOf("beautiful woman", "woman", "female", "portrait of a woman"),
             "帅哥" to listOf("handsome man", "man", "male", "portrait of a man"),
             "女人" to listOf("woman", "female", "adult woman"),
@@ -60,6 +68,7 @@ class ChineseQueryTranslator(
             "女生" to listOf("girl", "young woman", "female"),
             "男性" to listOf("male", "man"),
             "女性" to listOf("female", "woman"),
+            // 常见物体/场景
             "猫" to listOf("cat", "kitten"),
             "狗" to listOf("dog", "puppy"),
             "花" to listOf("flower", "blossom"),
@@ -67,7 +76,6 @@ class ChineseQueryTranslator(
             "日落" to listOf("sunset", "dusk"),
             "山" to listOf("mountain", "hill"),
             "美食" to listOf("food", "cuisine", "delicious food"),
-            // 口语化人物查询：避免 NMT 模型产生拟声/感叹等异常输出
             "大美女" to listOf("beautiful woman", "woman", "female", "portrait of a woman"),
             "大帅哥" to listOf("handsome man", "man", "male", "portrait of a man")
         )
@@ -127,6 +135,11 @@ class ChineseQueryTranslator(
     /**
      * 将用户查询扩展为多个 MobileCLIP 英文候选，语义搜索时取最大相似度。
      *
+     * 扩展来源（按优先级）：
+     * 1. CLIP_QUERY_EXPANSIONS 硬编码表（人工维护，CLIP 优化短语）
+     * 2. ControlledVocab 同义词翻译（动态，覆盖面广）
+     * 3. translateForClip 基础翻译（兜底）
+     *
      * @param query 用户原始查询
      * @return 候选英文查询列表（去重，至少包含翻译结果）
      */
@@ -134,25 +147,74 @@ class ChineseQueryTranslator(
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return emptyList()
 
-        // 纯英文：直接返回原查询 + 简单同义扩展（可后续补充）
+        // 纯英文：直接返回原查询
         if (!containsChinese(trimmed)) {
             return listOf(trimmed)
         }
 
         val translated = translateForClip(trimmed)
-        val expansions = CLIP_QUERY_EXPANSIONS[trimmed]
+        val hardcodedExpansions = CLIP_QUERY_EXPANSIONS[trimmed]
+        val synonymTranslations = expandViaControlledVocab(trimmed)
         val translationValid = isTranslationValid(trimmed, translated)
 
-        return if (expansions != null) {
-            if (translationValid) {
-                (listOf(translated) + expansions).distinct()
-            } else {
-                // 模型翻译异常（如 "Oh, oh, my God."）时丢弃，只用扩展候选
-                expansions.distinct()
-            }
-        } else {
-            listOf(translated)
+        val candidates = linkedSetOf<String>()
+
+        // 1. 基础翻译（如果有效）
+        if (translationValid) {
+            candidates += translated
         }
+
+        // 2. 硬编码 CLIP 优化扩展表（最高质量）
+        if (hardcodedExpansions != null) {
+            candidates.addAll(hardcodedExpansions)
+        }
+
+        // 3. 动态同义词翻译（ControlledVocab）
+        candidates.addAll(synonymTranslations)
+
+        return if (candidates.isEmpty()) {
+            // 所有路径都失败 → 保留原查询
+            listOf(translated)
+        } else {
+            candidates.toList()
+        }
+    }
+
+    /**
+     * 通过 ControlledVocab 动态扩展中文同义词并翻译为英文。
+     *
+     * 例如：输入 "美女" → synonyms["美女"] = "女性" → translateForClip("女性") = "female"
+     * 这弥补了硬编码 CLIP_QUERY_EXPANSIONS 仅 20 条的不足。
+     */
+    private fun expandViaControlledVocab(query: String): List<String> {
+        val cv = controlledVocab ?: return emptyList()
+        val results = mutableListOf<String>()
+
+        // 方向1: 输入是 synonym → 翻译 canonical
+        cv.synonyms[query]?.let { canonical ->
+            if (canonical != query) {
+                val canonicalTranslated = translateForClip(canonical)
+                if (canonicalTranslated != canonical && isTranslationValid(canonical, canonicalTranslated)) {
+                    results += canonicalTranslated
+                    Log.d(TAG, "ControlledVocab expand: '$query' → canonical '$canonical' → EN '$canonicalTranslated'")
+                }
+            }
+        }
+
+        // 方向2: 输入是 canonical → 翻译所有 synonyms
+        cv.reverseSynonyms[query]?.let { synonyms ->
+            for (syn in synonyms) {
+                if (syn != query) {
+                    val synTranslated = translateForClip(syn)
+                    if (synTranslated != syn && isTranslationValid(syn, synTranslated)) {
+                        results += synTranslated
+                        Log.d(TAG, "ControlledVocab reverse expand: '$query' → synonym '$syn' → EN '$synTranslated'")
+                    }
+                }
+            }
+        }
+
+        return results
     }
 
     /**

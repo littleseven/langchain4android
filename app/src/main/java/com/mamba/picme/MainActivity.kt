@@ -49,7 +49,6 @@ import com.mamba.picme.features.debug.DebugScreen
 import com.mamba.picme.features.gallery.GalleryScreen
 import com.mamba.picme.features.search.SearchTestScreen
 import com.mamba.picme.features.gallery.MediaViewModel
-import com.mamba.picme.features.gallery.components.DuplicateManagerRoute
 import com.mamba.picme.features.gallery.components.TagGenerationControlScreen
 import com.mamba.picme.features.translation.SentencePieceTestScreen
 import com.mamba.picme.features.settings.ModelCenterScreen
@@ -269,9 +268,6 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToTagControl = {
                                         navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true })
                                     },
-                                    onNavigateToDuplicateManager = {
-                                        navController.navigate(Screen.DuplicateManager.route, navOptions { launchSingleTop = true })
-                                    },
                                     onNavigateToDebug = {
                                         navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true })
                                     },
@@ -315,9 +311,6 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToTagControl = {
                                         navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true })
                                     },
-                                    onNavigateToDuplicateManager = {
-                                        navController.navigate(Screen.DuplicateManager.route, navOptions { launchSingleTop = true })
-                                    },
                                     onNavigateToDebug = {
                                         navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true })
                                     },
@@ -327,19 +320,6 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToCategory = { target ->
                                         navController.navigate(Screen.SettingsCategory.createRoute(target.name.lowercase()), navOptions { launchSingleTop = true })
                                     }
-                                )
-                            }
-                            composable(Screen.DuplicateManager.route) {
-                                // 场景管理：复用 Gallery 场景（处理相册媒体）
-                                DisposableEffect(Unit) {
-                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.GALLERY)
-                                    onDispose {
-                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.GALLERY)
-                                    }
-                                }
-                                DuplicateManagerRoute(
-                                    viewModel = mediaViewModel,
-                                    onNavigateBack = { navController.popBackStack() }
                                 )
                             }
                             composable(

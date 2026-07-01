@@ -59,7 +59,7 @@ class MediaSearchEngine(
         // Layer 0.5: 显式约束优先分段搜索（如"去年3月在室内小孩"）
         val segmentedQuery = QuerySegmenter().segment(query)
         if (segmentedQuery.hasExplicit && explicitFirstPipeline != null) {
-            val explicitResults = explicitFirstPipeline.search(segmentedQuery)
+            val explicitResults = explicitFirstPipeline.search(segmentedQuery, uiLang)
             if (explicitResults.media.isNotEmpty()) {
                 return SearchResult(explicitResults.media, query)
             }
@@ -247,9 +247,10 @@ class MediaSearchEngine(
 
         val labelResults = mediaDao.searchByLabel(candidate)
         val mlKitResults = mediaDao.searchByMlKitLabel(candidate)
+        val mlKitZhResults = mediaDao.searchByMlKitLabelZh(candidate)
         val ocrResults = mediaDao.searchByOcrText(candidate)
         val nameResults = mediaDao.searchByFileName(candidate)
-        (labelResults + mlKitResults + ocrResults + nameResults).forEach { resultMap[it.id] = it.toDomain() }
+        (labelResults + mlKitResults + mlKitZhResults + ocrResults + nameResults).forEach { resultMap[it.id] = it.toDomain() }
     }
 
     private suspend fun applyOcrKeywords(
@@ -701,6 +702,11 @@ Notes:
         mediaDao.searchByMlKitLabel(candidate).forEach { entity ->
             val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
             dims.add("mlkit_label")
+            resultMap[entity.id] = media to dims
+        }
+        mediaDao.searchByMlKitLabelZh(candidate).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("mlkit_label_zh")
             resultMap[entity.id] = media to dims
         }
     }

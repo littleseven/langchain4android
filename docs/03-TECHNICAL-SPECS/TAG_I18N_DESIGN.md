@@ -1,10 +1,10 @@
 # TAG 中英文国际化方案
 
-> 状态：已落地（Phase 0 + Phase 1 实现完成）  
-> 最后更新：2026-06-30  
+> 状态：已落地（Phase 0 + Phase 1 + Phase 1.5 实现完成）  
+> 最后更新：2026-07-01  
 > 维护者：RD Agent  
-> 目标：在**不强制全量重新生成 TAG** 的前提下，让英文语言用户能够搜索、查看已有中文 TAG，并支持后续新生成 TAG 按用户语言输出。  
-> 关联文档：`GALLERY_SEARCH.md`（搜索链路 SSOT）、`AUTO_TAG_GENERATION_SPEC.md`、`TAG_DATABASE_SCHEMA.md`、`docs/06-QA/research/OPUS_MT_TRANSLATION_VALIDATION.md`
+> 目标：在**不强制全量重新生成 TAG** 的前提下，让中英文用户都能跨语言搜索和查看 TAG。  
+> 关联文档：`GALLERY_SEARCH.md`（搜索链路 SSOT）、`AUTO_TAG_GENERATION_SPEC.md`、`TAG_DATABASE_SCHEMA.md`
 
 ---
 
@@ -203,8 +203,103 @@ data class TagConceptTranslation(
 |------|------|----------|------------|------|
 | **Phase 0** | 英文能搜、能看 | `TagTranslator` + `tag_translations.json`；改造 `MediaSearchEngine`、`QueryBuilder`、`MediaPager` | 否 | ✅ 已完成 |
 | **Phase 1** | 新照片按语言生成 | `TagPromptProvider` / `DefaultTagPromptProvider`；按 `AppLanguage` 切换 prompt | 仅新照片 | ✅ 已完成 |
+| **Phase 1.5** | 中文搜索召回 ML Kit 英文标签 + 中文同义词扩展 | `mlKitLabelsZh` 列、`MlKitLabelTranslator`、`TagTranslator` OPUS-MT 回退 + ControlledVocab 同义词 | 全量重扫 ML Kit（仅新增列） | ✅ 已完成 (2026-07-01) |
 | **Phase 2** | 结构化多语言 TAG | `TagConcept`/`TagConceptTranslation` 表；迁移 `TagEntity`/`MediaTagCrossRef` | 否（仅迁移） | 📋 待规划 |
 | **Phase 3** | 搜索体验升级 | 接入 FTS5 / 前缀索引；支持英文同义词、拼写容错 | 否 | 📋 待规划 |
+
+---
+
+## 6.5 Phase 1.5 详解：搜索翻译链路增强 (2026-07-01)
+
+### 6.5.1 问题背景
+
+Phase 0/1 解决了**英文用户搜索中文标签**的问题，但存在以下缺口：
+
+| 缺口 | 根因 | 影响 |
+|------|------|------|
+| 中文搜索无法命中 ML Kit 英文标签 | `mlKitLabels` 列存英文（如 `["Cat","Outdoor"]`），中文查询 `LIKE '%猫%'` 无法命中 | 中文用户搜索丢召回 |
+| 词表覆盖不全 | `tag_translations.json` 仅 534 条 zh→en，未命中时无回退 | 长尾中文词搜索丢召回 |
+| 中文同义词无法扩展 | `ControlledVocab.reverseSynonyms` 仅在标签生成时使用，搜索链路未接入 | "猫咪"搜不到"猫" |
+| 显式约束管道跳过翻译 | `ExplicitFirstSearchPipeline` 无 TagTranslator | "去年在室内猫" 内容词未翻译 |
+
+### 6.5.2 ML Kit 标签中文翻译（静态映射）
+
+ML Kit Image Labeling API 使用固定的 ~400 个英文标签。创建静态中英文映射表 `assets/mlkit_labels_zh.json`，在索引时同时存储中文翻译。
+
+**数据流：**
+
+```
+MlKitTagExtractor → 英文标签 ["Cat","Outdoor","Food"]
+                          ↓
+              MlKitLabelTranslator.translateToZh()
+                          ↓
+              中文标签 ["猫","户外","食物"]
+                          ↓
+         ┌────────────────┼────────────────┐
+         ↓                                 ↓
+  mlKitLabels (EN)                mlKitLabelsZh (ZH)
+  ["Cat","Outdoor","Food"]       ["猫","户外","食物"]
+```
+
+**DB Migration 6→7：** 新增 `media_assets.mlKitLabelsZh TEXT` 列。
+
+**搜索时：** 所有搜索路径同时查询 `mlKitLabels` 和 `mlKitLabelsZh`，确保中英文查询都能命中。
+
+### 6.5.3 TagTranslator 翻译分层策略
+
+```
+expandForSearch(中文查询词)
+  │
+  ├─ 1. BilingualVocab.zhToEn 词表精确匹配（0ms）
+  │    命中 → 返回 {中文词, 英文词}
+  │
+  ├─ 2. ControlledVocab 中文同义词双向扩展（0ms）
+  │    synonyms: "美女"→"女性"
+  │    reverseSynonyms: "女性"→["美女","大美女"]
+  │
+  ├─ 3. OPUS-MT 模型翻译回退（~50ms，词表未命中时）
+  │    中文词 → NMT → 英文词
+  │    质量校验：过滤空白/异常输出
+  │
+  └─ 4. 保留原词兜底
+```
+
+### 6.5.4 ChineseQueryTranslator CLIP 扩展增强
+
+```
+expandForClip(中文查询)
+  │
+  ├─ 1. CLIP_QUERY_EXPANSIONS 硬编码表（人工维护，CLIP 优化短语）
+  │    如 "小孩"→["child","kid","children","young child"]
+  │
+  ├─ 2. ControlledVocab 同义词动态翻译（新增）
+  │    "美女"→synonym "女性"→translateForClip("女性")→"female"
+  │    弥补硬编码表仅 20 条的不足
+  │
+  └─ 3. translateForClip 基础翻译（vocab→OPUS-MT 回退）
+```
+
+### 6.5.5 关键文件变更
+
+```text
+新增：
+app/src/main/assets/mlkit_labels_zh.json
+app/src/main/java/com/mamba/picme/domain/tag/i18n/MlKitLabelTranslator.kt
+app/src/test/java/com/mamba/picme/domain/tag/i18n/MlKitLabelTranslatorTest.kt
+
+修改：
+app/src/main/java/com/mamba/picme/data/local/AppDatabase.kt          (version 6→7, MIGRATION_6_7)
+app/src/main/java/com/mamba/picme/data/model/MediaEntity.kt          (新增 mlKitLabelsZh 字段)
+app/src/main/java/com/mamba/picme/data/local/MediaDao.kt             (新增 updateMlKitLabelsZh/searchByMlKitLabelZh/searchMlKitLabelsZhInIds/resetAllMlKitLabelsZh)
+app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt (索引时存储中文翻译)
+app/src/main/java/com/mamba/picme/domain/tag/scan/TagScanOrchestrator.kt (全量重扫时同步清空 mlKitLabelsZh)
+app/src/main/java/com/mamba/picme/domain/tag/i18n/TagTranslator.kt   (OPUS-MT 回退 + ControlledVocab 同义词 + Logger)
+app/src/main/java/com/mamba/picme/domain/tag/i18n/ChineseQueryTranslator.kt (ControlledVocab 动态扩展)
+app/src/main/java/com/mamba/picme/domain/search/MediaSearchEngine.kt (searchByMlKitLabelZh)
+app/src/main/java/com/mamba/picme/domain/search/ExplicitFirstSearchPipeline.kt (注入 TagTranslator + mlKitLabelsZh 搜索)
+app/src/main/java/com/mamba/picme/di/AppContainer.kt                 (注入 ControlledVocab/OpusMtTranslator/MlKitLabelTranslator)
+app/src/test/java/com/mamba/picme/domain/tag/i18n/TagTranslatorTest.kt (扩展测试)
+```
 
 ---
 
@@ -214,19 +309,26 @@ data class TagConceptTranslation(
 新增：
 app/src/main/java/com/mamba/picme/domain/tag/i18n/TagTranslator.kt
 app/src/main/java/com/mamba/picme/domain/tag/i18n/BilingualVocab.kt
+app/src/main/java/com/mamba/picme/domain/tag/i18n/MlKitLabelTranslator.kt      (Phase 1.5)
 app/src/main/java/com/mamba/picme/domain/tag/prompt/TagPromptProvider.kt
 app/src/main/java/com/mamba/picme/domain/tag/prompt/DefaultTagPromptProvider.kt
 app/src/main/assets/tag_translations.json
-scripts/generate_tag_translations.py
+app/src/main/assets/mlkit_labels_zh.json                                        (Phase 1.5)
 
 修改：
 app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt
 app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt
+app/src/main/java/com/mamba/picme/domain/tag/scan/TagScanOrchestrator.kt
 app/src/main/java/com/mamba/picme/domain/search/MediaSearchEngine.kt
 app/src/main/java/com/mamba/picme/domain/search/QueryBuilder.kt
 app/src/main/java/com/mamba/picme/domain/search/QueryParser.kt
-app/src/main/java/com/mamba/picme/domain/agent/capability/AutoTagCapability.kt
-app/src/main/java/com/mamba/picme/features/gallery/components/MediaPager.kt
+app/src/main/java/com/mamba/picme/domain/search/ExplicitFirstSearchPipeline.kt   (Phase 1.5)
+app/src/main/java/com/mamba/picme/domain/tag/i18n/TagTranslator.kt              (Phase 1.5)
+app/src/main/java/com/mamba/picme/domain/tag/i18n/ChineseQueryTranslator.kt     (Phase 1.5)
+app/src/main/java/com/mamba/picme/data/local/AppDatabase.kt                     (Phase 1.5: v6→v7)
+app/src/main/java/com/mamba/picme/data/model/MediaEntity.kt                     (Phase 1.5)
+app/src/main/java/com/mamba/picme/data/local/MediaDao.kt                        (Phase 1.5)
+app/src/main/java/com/mamba/picme/di/AppContainer.kt                            (Phase 1.5)
 app/src/main/res/values/strings.xml
 app/src/main/res/values-zh-rCN/strings.xml
 ```
@@ -251,3 +353,8 @@ app/src/main/res/values-zh-rCN/strings.xml
 - [x] 切换为中文后，搜索/展示恢复为中文。
 - [x] 不触发全量 TAG 重新生成即可生效。
 - [x] Prompt 与 Agent Capability 描述支持英文。
+- [x] 中文搜索能命中 ML Kit 英文标签（通过 `mlKitLabelsZh` 列 + `MlKitLabelTranslator`）。
+- [x] 中文同义词搜索扩展（"美女"→"女性"，"猫咪"→"猫"，通过 `ControlledVocab.reverseSynonyms`）。
+- [x] 词表未命中时 OPUS-MT NMT 模型翻译回退（通过 `TagTranslator` MT fallback）。
+- [x] 显式约束管道支持跨语言搜索（通过 `ExplicitFirstSearchPipeline` 注入 `TagTranslator`）。
+- [x] CLIP 语义搜索使用 ControlledVocab 动态扩展候选英文短语。

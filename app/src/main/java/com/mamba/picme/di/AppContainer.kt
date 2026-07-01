@@ -29,6 +29,7 @@ import com.mamba.picme.domain.search.ExplicitFirstSearchPipeline
 import com.mamba.picme.domain.search.MediaSearchEngine
 import com.mamba.picme.domain.search.QueryBuilder
 import com.mamba.picme.domain.search.SemanticSearchEngine
+import com.mamba.picme.domain.tag.ControlledVocab
 import com.mamba.picme.domain.tag.i18n.BilingualVocab
 import com.mamba.picme.domain.tag.i18n.ChineseQueryTranslator
 import com.mamba.picme.domain.tag.i18n.OpusMtTranslator
@@ -124,17 +125,28 @@ class AppContainerImpl(
 
     private val database by lazy { AppDatabase.getDatabase(context) }
 
+    /** 双语词表（全局共享，避免重复加载） */
+    private val bilingualVocab: BilingualVocab by lazy {
+        BilingualVocab.loadFromAssets(context)
+    }
+
+    /** 受控词表（标签规范化 + 搜索同义词扩展） */
+    private val controlledVocab: ControlledVocab by lazy {
+        ControlledVocab.loadFromAssets(context)
+    }
+
     /** OPUS-MT 翻译引擎（SentencePiece + ONNX Runtime） */
     private val opusMtTranslator: OpusMtTranslator by lazy {
         OpusMtTranslator(context)
     }
 
-    /** 中文查询翻译器（注入 OPUS-MT 翻译引擎） */
+    /** 中文查询翻译器（注入 OPUS-MT 翻译引擎 + 受控词表） */
     private val chineseQueryTranslator: ChineseQueryTranslator by lazy {
         ChineseQueryTranslator(
             context = context,
-            vocab = BilingualVocab.loadFromAssets(context),
-            translator = opusMtTranslator
+            vocab = bilingualVocab,
+            translator = opusMtTranslator,
+            controlledVocab = controlledVocab
         )
     }
 
@@ -147,9 +159,12 @@ class AppContainerImpl(
         )
     }
 
-    /** 显式约束优先搜索管道 */
+    /** 显式约束优先搜索管道（注入翻译器支持跨语言扩展） */
     private val explicitFirstSearchPipeline: ExplicitFirstSearchPipeline by lazy {
-        ExplicitFirstSearchPipeline(mediaDao = database.mediaDao())
+        ExplicitFirstSearchPipeline(
+            mediaDao = database.mediaDao(),
+            tagTranslator = TagTranslator(bilingualVocab, opusMtTranslator, controlledVocab)
+        )
     }
 
     /** 媒体搜索引擎（自然语言图片搜索） */
@@ -160,7 +175,7 @@ class AppContainerImpl(
             ocrWordDao = database.ocrWordDao(),
             locationDao = database.locationDao(),
             userSettingsRepository = userPreferencesRepository,
-            tagTranslator = TagTranslator(BilingualVocab.loadFromAssets(context)),
+            tagTranslator = TagTranslator(bilingualVocab, opusMtTranslator, controlledVocab),
             semanticSearchEngine = semanticSearchEngine,
             explicitFirstPipeline = explicitFirstSearchPipeline
         )
@@ -174,7 +189,7 @@ class AppContainerImpl(
             ocrWordDao = database.ocrWordDao(),
             locationDao = database.locationDao(),
             userSettingsRepository = userPreferencesRepository,
-            tagTranslator = TagTranslator(BilingualVocab.loadFromAssets(context))
+            tagTranslator = TagTranslator(BilingualVocab.loadFromAssets(context), opusMtTranslator)
         )
     }
 

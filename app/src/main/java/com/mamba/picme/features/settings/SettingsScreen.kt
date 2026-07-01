@@ -22,7 +22,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.rounded.CameraAlt
-import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.SmartToy
@@ -108,7 +109,6 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToModelCenter: (String) -> Unit = {},
     onNavigateToTagControl: () -> Unit = {},
-    onNavigateToDuplicateManager: () -> Unit = {},
     onNavigateToDebug: () -> Unit = {},
     onNavigateToSearchTest: () -> Unit = {},
     onNavigateToCategory: (SettingsCategory) -> Unit = {}
@@ -290,7 +290,6 @@ fun SettingsScreen(
             localKwsModel = localKwsModel,
             onLocalKwsModelChange = { viewModel.setLocalKwsModel(it) },
             onNavigateToModelCenter = onNavigateToModelCenter,
-            onNavigateToDuplicateManager = onNavigateToDuplicateManager,
             onNavigateToCategory = onNavigateToCategory,
             isModelDownloaded = viewModel::isModelDownloaded,
             getModelId = viewModel::getModelId,
@@ -370,7 +369,6 @@ private fun SettingsContent(
     onLandmarkModelTypeSelected: (DetectionModelType) -> Unit,
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onNavigateToModelCenter: (String) -> Unit,
-    onNavigateToDuplicateManager: () -> Unit = {},
     onNavigateToCategory: (SettingsCategory) -> Unit = {},
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
@@ -422,34 +420,17 @@ private fun SettingsContent(
         ) {
             if (category == SettingsCategory.MAIN) {
                 SettingsMainMenu(
+                    themeMode = themeMode,
+                    onThemeModeSelected = onThemeModeSelected,
+                    appLanguage = appLanguage,
+                    onAppLanguageSelected = onAppLanguageSelected,
                     onNavigateToCategory = onNavigateToCategory,
-                    onNavigateToDuplicateManager = onNavigateToDuplicateManager
+                    onNavigateToModelCenter = { onNavigateToModelCenter("") }
                 )
                 return@Column
             }
 
-            // ── 1. 个性化 ─────────────────────────────────────────
-            if (category == SettingsCategory.PERSONALIZATION) {
-                SettingsSection(
-                    title = stringResource(R.string.theme_mode),
-                    description = stringResource(R.string.settings_theme_mode_desc)
-                ) {
-                    ThemeSelection(
-                        currentMode = themeMode,
-                        onModeSelected = onThemeModeSelected
-                    )
-                }
-
-                SettingsSection(
-                    title = stringResource(R.string.language),
-                    description = stringResource(R.string.settings_language_desc)
-                ) {
-                    LanguageSelection(
-                        currentLanguage = appLanguage,
-                        onLanguageSelected = onAppLanguageSelected
-                    )
-                }
-            }
+            // ── 1. 个性化（主题与语言已迁移至设置页主菜单顶部）───
 
             // ── 2. AI 助手 ────────────────────────────────────────
             if (category == SettingsCategory.AI_AGENT) {
@@ -595,13 +576,6 @@ private fun SettingsContent(
                     title = stringResource(R.string.gallery_features),
                     description = stringResource(R.string.gallery_features_desc)
                 ) {
-                    SettingsClickableRow(
-                        title = stringResource(R.string.manage_duplicates),
-                        subtitle = stringResource(R.string.duplicate_manager_desc),
-                        leadingIcon = Icons.Rounded.ContentCopy,
-                        onClick = onNavigateToDuplicateManager
-                    )
-
                     SettingsClickableRow(
                         title = stringResource(R.string.tag_control_title),
                         subtitle = stringResource(R.string.tag_control_subtitle),
@@ -859,24 +833,71 @@ private fun SettingsContent(
 
 @Composable
 private fun SettingsMainMenu(
+    themeMode: ThemeMode,
+    onThemeModeSelected: (ThemeMode) -> Unit,
+    appLanguage: AppLanguage,
+    onAppLanguageSelected: (AppLanguage) -> Unit,
     onNavigateToCategory: (SettingsCategory) -> Unit,
-    onNavigateToDuplicateManager: () -> Unit
+    onNavigateToModelCenter: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // ── 主题 ──
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.theme_mode),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                ThemeSelection(
+                    currentMode = themeMode,
+                    onModeSelected = onThemeModeSelected
+                )
+            }
+        }
+
+        // ── 语言 ──
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.language),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                LanguageSelection(
+                    currentLanguage = appLanguage,
+                    onLanguageSelected = onAppLanguageSelected
+                )
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            SettingsCategoryCard(
-                title = stringResource(R.string.personalization),
-                description = stringResource(R.string.personalization_desc),
-                icon = Icons.Rounded.Palette,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigateToCategory(SettingsCategory.PERSONALIZATION) }
-            )
             SettingsCategoryCard(
                 title = stringResource(R.string.ai_assistant),
                 description = stringResource(R.string.ai_assistant_desc),
@@ -884,12 +905,6 @@ private fun SettingsMainMenu(
                 modifier = Modifier.weight(1f),
                 onClick = { onNavigateToCategory(SettingsCategory.AI_AGENT) }
             )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
             SettingsCategoryCard(
                 title = stringResource(R.string.gallery_features),
                 description = stringResource(R.string.gallery_features_desc),
@@ -897,12 +912,25 @@ private fun SettingsMainMenu(
                 modifier = Modifier.weight(1f),
                 onClick = { onNavigateToCategory(SettingsCategory.GALLERY) }
             )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             SettingsCategoryCard(
                 title = stringResource(R.string.camera_and_beauty),
                 description = stringResource(R.string.camera_and_beauty_desc),
                 icon = Icons.Rounded.CameraAlt,
                 modifier = Modifier.weight(1f),
                 onClick = { onNavigateToCategory(SettingsCategory.CAMERA_BEAUTY) }
+            )
+            SettingsCategoryCard(
+                title = stringResource(R.string.system_and_permissions),
+                description = stringResource(R.string.system_and_permissions_desc),
+                icon = Icons.Rounded.Storage,
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigateToCategory(SettingsCategory.SYSTEM) }
             )
         }
 
@@ -911,30 +939,20 @@ private fun SettingsMainMenu(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             SettingsCategoryCard(
-                title = stringResource(R.string.system_and_permissions),
-                description = stringResource(R.string.system_and_permissions_desc),
-                icon = Icons.Rounded.Storage,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigateToCategory(SettingsCategory.SYSTEM) }
-            )
-            SettingsCategoryCard(
                 title = stringResource(R.string.developer_options),
                 description = stringResource(R.string.developer_options_desc),
                 icon = Icons.Rounded.Terminal,
                 modifier = Modifier.weight(1f),
                 onClick = { onNavigateToCategory(SettingsCategory.DEVELOPER) }
             )
+            SettingsCategoryCard(
+                title = stringResource(R.string.model_center),
+                description = stringResource(R.string.model_center_desc),
+                icon = Icons.Rounded.CloudDownload,
+                modifier = Modifier.weight(1f),
+                onClick = onNavigateToModelCenter
+            )
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // 快速入口：重复照片管理（从相册页迁移过来）
-        SettingsClickableRow(
-            title = stringResource(R.string.manage_duplicates),
-            subtitle = stringResource(R.string.duplicate_manager_desc),
-            leadingIcon = Icons.Rounded.ContentCopy,
-            onClick = onNavigateToDuplicateManager
-        )
     }
 }
 
@@ -1090,10 +1108,9 @@ private fun LanguageSelection(
     onLanguageSelected: (AppLanguage) -> Unit
 ) {
     val options = listOf(
-        AppLanguage.SYSTEM to stringResource(R.string.system_default),
-        AppLanguage.ENGLISH to stringResource(R.string.english),
-        AppLanguage.CHINESE to stringResource(R.string.chinese),
-        AppLanguage.TRADITIONAL_CHINESE to stringResource(R.string.traditional_chinese)
+        AppLanguage.ENGLISH to "English",
+        AppLanguage.CHINESE to "中文",
+        AppLanguage.TRADITIONAL_CHINESE to "繁體中文"
     )
     CompactOptionChips(
         options = options,

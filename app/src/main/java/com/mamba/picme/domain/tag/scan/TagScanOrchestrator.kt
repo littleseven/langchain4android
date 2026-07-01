@@ -311,8 +311,9 @@ class TagScanOrchestrator(
         }
 
         if (pass == TagScanPass.ML_KIT_TAGGING && mode == ScanMode.FULL) {
-            // 全量重跑 ML Kit 标签：清空已有 ML Kit 标签
+            // 全量重跑 ML Kit 标签：清空已有 ML Kit 中英文标签
             db.mediaDao().resetAllMlKitLabels()
+            db.mediaDao().resetAllMlKitLabelsZh()
         }
 
         // 手动 Pass 增量：按阶段特征过滤，不受时间窗口限制
