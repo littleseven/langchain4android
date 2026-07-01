@@ -380,7 +380,7 @@ fun GalleryScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             when {
-                isSearchActive -> {
+                isSearchActive && !isSelectionMode -> {
                     // 搜索模式：显示搜索框
                     com.mamba.picme.features.gallery.components.SearchTopBar(
                         searchQuery = searchQuery,
@@ -415,11 +415,17 @@ fun GalleryScreen(
                             selectedIds.clear()
                         },
                         onSelectAll = {
-                            if (selectedIds.size == allFlatMedia.size) {
+                            // 搜索模式下只针对搜索结果进行全选/取消全选
+                            val targetItems = if (isSearchActive && searchQuery.isNotBlank()) {
+                                searchResultMedia
+                            } else {
+                                allFlatMedia
+                            }
+                            if (selectedIds.size == targetItems.size) {
                                 selectedIds.clear()
                             } else {
                                 selectedIds.clear()
-                                selectedIds.addAll(allFlatMedia.map { it.id })
+                                selectedIds.addAll(targetItems.map { it.id })
                             }
                         },
                         onDeleteSelected = {
