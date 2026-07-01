@@ -71,11 +71,12 @@ class ChineseQueryTranslatorTest {
 
         // 修复：即使词表未命中且 OPUS-MT 不可用，CLIP_QUERY_EXPANSIONS 也能提供英文候选，
         // 避免中文字符直接进入 CLIP tokenizer 导致 embedding 质量差。
+        // 当 fallback 为原中文时会被视为无效翻译，仅返回英文扩展候选。
         assertEquals(
-            listOf("女人", "woman", "female", "adult woman"),
+            listOf("woman", "female", "adult woman"),
             candidates
         )
-        assertTrue(translator.containsChinese(candidates.first()))
+        assertFalse(translator.containsChinese(candidates.first()))
     }
 
     @Test
@@ -124,5 +125,24 @@ class ChineseQueryTranslatorTest {
         assertTrue(translator.containsChinese("美女"))
         assertTrue(translator.containsChinese("女人"))
         assertFalse(translator.containsChinese("woman"))
+    }
+
+    @Test
+    fun `大美女模型翻译异常时只返回扩展英文候选`() {
+        val vocab = BilingualVocab.empty()
+        // 模拟 OPUS-MT 输出异常翻译 "Oh, oh, my God."
+        val badTranslator = mockk<OpusMtTranslator> {
+            every { translate("大美女") } returns "Oh, oh, my God."
+        }
+        val translator = ChineseQueryTranslator(context, vocab, translator = badTranslator)
+
+        val candidates = translator.expandForClip("大美女")
+
+        // 异常翻译应被过滤，仅返回 CLIP_QUERY_EXPANSIONS 中的英文候选
+        assertEquals(
+            listOf("beautiful woman", "woman", "female", "portrait of a woman"),
+            candidates
+        )
+        assertFalse(candidates.any { it.contains("God", ignoreCase = true) })
     }
 }

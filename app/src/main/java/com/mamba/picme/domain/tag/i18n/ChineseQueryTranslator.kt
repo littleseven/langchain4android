@@ -66,7 +66,10 @@ class ChineseQueryTranslator(
             "海边" to listOf("beach", "seaside", "shore"),
             "日落" to listOf("sunset", "dusk"),
             "山" to listOf("mountain", "hill"),
-            "美食" to listOf("food", "cuisine", "delicious food")
+            "美食" to listOf("food", "cuisine", "delicious food"),
+            // 口语化人物查询：避免 NMT 模型产生拟声/感叹等异常输出
+            "大美女" to listOf("beautiful woman", "woman", "female", "portrait of a woman"),
+            "大帅哥" to listOf("handsome man", "man", "male", "portrait of a man")
         )
     }
 
@@ -138,9 +141,15 @@ class ChineseQueryTranslator(
 
         val translated = translateForClip(trimmed)
         val expansions = CLIP_QUERY_EXPANSIONS[trimmed]
+        val translationValid = isTranslationValid(trimmed, translated)
 
         return if (expansions != null) {
-            (listOf(translated) + expansions).distinct()
+            if (translationValid) {
+                (listOf(translated) + expansions).distinct()
+            } else {
+                // 模型翻译异常（如 "Oh, oh, my God."）时丢弃，只用扩展候选
+                expansions.distinct()
+            }
         } else {
             listOf(translated)
         }
@@ -231,6 +240,10 @@ class ChineseQueryTranslator(
         if (words.isEmpty()) return false
         val interjectionCount = words.count { it in interjectionWords }
         if (interjectionCount.toFloat() / words.size > 0.5f) return false
+
+        // 过滤宗教/感叹口头禅（如 "Oh, oh, my God.", "Oh my gosh"）
+        val meaninglessExclamations = setOf("god", "gosh", "jeez", "lord")
+        if (words.any { it in meaninglessExclamations }) return false
 
         // 过滤重复单字符（如 "aaaa" 或 "a a a a"）
         val clean = output.filter { it.isLetter() }
