@@ -6,7 +6,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.mamba.picme.data.local.dao.FtsSearchDao
 import com.mamba.picme.data.local.dao.LocationDao
 import com.mamba.picme.data.local.dao.OcrWordDao
 import com.mamba.picme.data.local.dao.PersonDao
@@ -51,7 +50,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun ocrWordDao(): OcrWordDao
     abstract fun personDao(): PersonDao
     abstract fun locationDao(): LocationDao
-    abstract fun ftsSearchDao(): FtsSearchDao
 
     companion object {
         @Volatile
@@ -160,8 +158,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         /**
          * Migration 7 → 8：性能优化
-         * 1. 添加 captureDate/hasFace 索引（清理旧命名 + 创建 Room 标准命名）
-         * 2. FTS5 虚拟表改为运行时惰性创建（避免 migration 中 DDL 异常导致 crash）
+         * 添加 captureDate/hasFace 索引（清理旧命名 + 创建 Room 标准命名）
          */
         private val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -182,10 +179,6 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_media_assets_hasFace` ON `media_assets`(`hasFace`)"
                 )
-
-                // FTS5 虚拟表不在此处创建，改为运行时惰性初始化（见 FtsHelper.ensureAvailable）
-                // 原因：部分设备系统 SQLite 未编译 FTS5，DDL 虽可 catch，
-                // 但 SQLiteLog 仍会输出 error 级别日志，造成日志噪音
             }
         }
     }

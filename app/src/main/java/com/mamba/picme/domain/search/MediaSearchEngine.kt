@@ -2,8 +2,6 @@ package com.mamba.picme.domain.search
 
 import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.data.local.MediaDao
-import com.mamba.picme.data.local.dao.FtsHelper
-import com.mamba.picme.data.local.dao.FtsSearchDao
 import com.mamba.picme.data.local.dao.LocationDao
 import com.mamba.picme.data.local.dao.OcrWordDao
 import com.mamba.picme.data.local.dao.TagDao
@@ -16,6 +14,8 @@ import com.mamba.picme.domain.tag.i18n.TagTranslator
 import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONException
 
 /**
@@ -38,7 +38,6 @@ class MediaSearchEngine(
     private val tagDao: TagDao? = null,
     private val ocrWordDao: OcrWordDao? = null,
     private val locationDao: LocationDao? = null,
-    private val ftsSearchDao: FtsSearchDao? = null,
     private val userSettingsRepository: UserSettingsRepository? = null,
     private val tagTranslator: TagTranslator = TagTranslator(BilingualVocab.empty()),
     private val semanticSearchEngine: SemanticSearchEngine? = null,
@@ -54,10 +53,6 @@ class MediaSearchEngine(
         }
     }
 
-    /** FTS5 惰性初始化标记（仅尝试一次） */
-    @Volatile
-    private var fts5InitAttempted: Boolean = false
-
     /**
      * 带缓存的搜索扩展：缓存 key = "$query|$uiLang"
      */
@@ -65,36 +60,6 @@ class MediaSearchEngine(
         val key = "$query|$uiLang"
         return translationCache.getOrPut(key) {
             tagTranslator.expandForSearch(query, uiLang)
-        }
-    }
-
-    /**
-     * FTS5 惰性初始化：首次搜索时在后台线程创建虚拟表。
-     * 创建失败 → 标记不可用，后续静默回退 LIKE。
-     */
-    private suspend fun ensureFts5() {
-        if (fts5InitAttempted || ftsSearchDao == null) return
-        fts5InitAttempted = true
-        try {
-            ftsSearchDao!!.execRaw(
-                androidx.sqlite.db.SimpleSQLiteQuery(
-                    """
-                    CREATE VIRTUAL TABLE IF NOT EXISTS `media_fts` USING fts5(
-                        `labels`,
-                        `ocrText`,
-                        `locationName`,
-                        `fileName`,
-                        `mlKitLabels`,
-                        `mlKitLabelsZh`,
-                        content='media_assets',
-                        content_rowid='id'
-                    )
-                    """.trimIndent()
-                )
-            )
-            FtsHelper.isAvailable = true
-        } catch (e: Exception) {
-            FtsHelper.isAvailable = false
         }
     }
 
@@ -127,12 +92,16 @@ class MediaSearchEngine(
         // Layer 1: 规则匹配
         val filter = QueryParser.parse(query, uiLang)
         if (filter != null && !filter.needsLlm) {
-            val results = executeFilter(filter)
-
-            // Layer 2.5: 语义召回增强（如果规则匹配结果较少，补充语义结果）
-            val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
-                searchSemantic(query, filter)
-            } else emptyList()
+            // SQL 搜索与语义召回并行执行
+            val (results, semanticResults) = coroutineScope {
+                val sqlDeferred = async { executeFilter(filter) }
+                val semanticDeferred = async {
+                    if (enableSemanticSearch && semanticSearchEngine != null) {
+                        searchSemantic(query, filter)
+                    } else emptyList()
+                }
+                sqlDeferred.await() to semanticDeferred.await()
+            }
 
             // Layer 3: 融合排序
             val merged = mergeAndRank(results, semanticResults)
@@ -143,29 +112,37 @@ class MediaSearchEngine(
         if (llmSearch != null) {
             val llmFilter = llmSearch(query)
             if (llmFilter != null) {
-                val results = executeFilter(llmFilter)
-
-                // 语义召回增强
-                val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
-                    searchSemantic(query, llmFilter)
-                } else emptyList()
+                // SQL 搜索与语义召回并行执行
+                val (results, semanticResults) = coroutineScope {
+                    val sqlDeferred = async { executeFilter(llmFilter) }
+                    val semanticDeferred = async {
+                        if (enableSemanticSearch && semanticSearchEngine != null) {
+                            searchSemantic(query, llmFilter)
+                        } else emptyList()
+                    }
+                    sqlDeferred.await() to semanticDeferred.await()
+                }
 
                 val merged = mergeAndRank(results, semanticResults)
                 return SearchResult(merged, query)
             }
         }
 
-        // 回退：全字段模糊搜索 + 语义召回
-        val queryCandidates = cachedExpandForSearch(query, uiLang)
-        val sqlResults = queryCandidates
-            .flatMap { mediaDao.searchAll(it) }
-            .map { it.toDomain() }
-            .distinct()
-
-        // 语义召回（无结构化过滤时全量语义搜索）
-        val semanticResults = if (enableSemanticSearch && semanticSearchEngine != null) {
-            searchSemantic(query, null)
-        } else emptyList()
+        // 回退：全字段模糊搜索 + 语义召回，并行执行
+        val (sqlResults, semanticResults) = coroutineScope {
+            val sqlDeferred = async {
+                cachedExpandForSearch(query, uiLang)
+                    .flatMap { mediaDao.searchAll(it) }
+                    .map { it.toDomain() }
+                    .distinct()
+            }
+            val semanticDeferred = async {
+                if (enableSemanticSearch && semanticSearchEngine != null) {
+                    searchSemantic(query, null)
+                } else emptyList()
+            }
+            sqlDeferred.await() to semanticDeferred.await()
+        }
 
         val merged = mergeAndRank(sqlResults, semanticResults)
         return SearchResult(merged, query)
@@ -297,9 +274,8 @@ class MediaSearchEngine(
      * 按候选词搜索所有文本字段。
      *
      * 策略：
-     * 1. FTS5 优先（1 次查询覆盖 labels/ocrText/fileName/mlKitLabels/mlKitLabelsZh）
-     * 2. FTS5 不可用或失败 → 回退到 LIKE 查询
-     * 3. 辅助表（tags/ocr_words）始终独立查询
+     * 1. 辅助表（tags/ocr_words）精确匹配
+     * 2. 主表 LIKE 查询（labels/mlKitLabels/mlKitLabelsZh/ocrText/fileName）
      */
     private suspend fun searchByCandidate(
         candidate: String,
@@ -313,38 +289,11 @@ class MediaSearchEngine(
             ocrWordDao.searchByWordPrefix(candidate.lowercase()).forEach { resultMap[it.id] = it.toDomain() }
         }
 
-        // 主表文本字段查询：FTS5 优先（1 query），LIKE 回退（5 queries）
-        ensureFts5() // 惰性创建 FTS5 虚拟表（仅首次）
-        if (FtsHelper.isAvailable && ftsSearchDao != null) {
-            val ftsHit = tryFts5Search(candidate, resultMap)
-            if (ftsHit) return
-        }
-
-        // LIKE 回退：逐个字段搜索
+        // 主表 LIKE 查询
         searchByLikeFallback(candidate, resultMap)
     }
 
-    /** 尝试 FTS5 搜索，返回 true 表示成功（即使 0 结果） */
-    private suspend fun tryFts5Search(
-        candidate: String,
-        resultMap: MutableMap<Long, MediaAsset>
-    ): Boolean {
-        // 惰性创建 FTS5 虚拟表（仅首次）
-        ensureFts5()
-        if (!FtsHelper.isAvailable) return false
-
-        return try {
-            val ftsResults = ftsSearchDao!!.searchFts(FtsHelper.searchQuery(candidate))
-            ftsResults.forEach { resultMap[it.id] = it.toDomain() }
-            true
-        } catch (e: Exception) {
-            // 查询失败 → 标记不可用，后续走 LIKE
-            FtsHelper.isAvailable = false
-            false
-        }
-    }
-
-    /** LIKE 回退搜索（FTS5 不可用时） */
+    /** LIKE 搜索所有文本字段 */
     private suspend fun searchByLikeFallback(
         candidate: String,
         resultMap: MutableMap<Long, MediaAsset>
@@ -799,40 +748,24 @@ Notes:
             }
         }
 
-        // 主表文本字段：FTS5 优先（惰性创建虚拟表）
-        ensureFts5()
-        val fts5Hit = FtsHelper.isAvailable && ftsSearchDao != null && try {
-            ftsSearchDao!!.searchFts(FtsHelper.searchQuery(candidate)).forEach { entity ->
-                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-                dims.add("fts5")
-                resultMap[entity.id] = media to dims
-            }
-            true
-        } catch (e: Exception) {
-            FtsHelper.isAvailable = false
-            false
+        // 主表 LIKE 查询
+        mediaDao.searchByLabel(candidate).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("label")
+            resultMap[entity.id] = media to dims
+        }
+        mediaDao.searchByOcrText(candidate).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("ocr")
+            resultMap[entity.id] = media to dims
+        }
+        mediaDao.searchByFileName(candidate).forEach { entity ->
+            val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
+            dims.add("file_name")
+            resultMap[entity.id] = media to dims
         }
 
-        // LIKE 回退
-        if (!fts5Hit) {
-            mediaDao.searchByLabel(candidate).forEach { entity ->
-                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-                dims.add("label")
-                resultMap[entity.id] = media to dims
-            }
-            mediaDao.searchByOcrText(candidate).forEach { entity ->
-                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-                dims.add("ocr")
-                resultMap[entity.id] = media to dims
-            }
-            mediaDao.searchByFileName(candidate).forEach { entity ->
-                val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
-                dims.add("file_name")
-                resultMap[entity.id] = media to dims
-            }
-        }
-
-        // ML Kit 标签（中英文）始终查询（FTS5 已覆盖，但诊断需要区分维度）
+        // ML Kit 标签（中英文）
         mediaDao.searchByMlKitLabel(candidate).forEach { entity ->
             val (media, dims) = resultMap.getOrPut(entity.id) { entity.toDomain() to mutableSetOf() }
             dims.add("mlkit_label")

@@ -86,6 +86,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CameraAlt
@@ -94,6 +95,7 @@ import androidx.compose.material.icons.rounded.SmartToy
 
 private const val TAG = "Gallery"
 private const val TAG_AGENT = "GalleryAgent"
+private const val SEARCH_DEBOUNCE_MS = 300L
 
 @OptIn(FlowPreview::class)
 @Composable
@@ -131,6 +133,24 @@ fun GalleryScreen(
                     Logger.d(TAG, "Media library changed, refreshing search results")
                     isSearchLoading = true
                     searchResultMedia = searchEngine.search(searchQuery).media
+                    isSearchLoading = false
+                }
+            }
+    }
+
+    // 搜索输入防抖：300ms 无新输入后才触发实际搜索
+    LaunchedEffect(Unit) {
+        snapshotFlow { searchQuery }
+            .debounce(SEARCH_DEBOUNCE_MS)
+            .collectLatest { query ->
+                if (query.isBlank()) {
+                    searchResultMedia = emptyList()
+                    isSearchLoading = false
+                } else {
+                    val engine = searchEngine
+                    if (engine != null) {
+                        searchResultMedia = engine.search(query).media
+                    }
                     isSearchLoading = false
                 }
             }
@@ -420,12 +440,6 @@ fun GalleryScreen(
                             searchQuery = query
                             if (query.isNotBlank()) {
                                 isSearchLoading = true
-                                searchScope.launch {
-                                    val engine = searchEngine ?: return@launch
-                                    val result = engine.search(query)
-                                    searchResultMedia = result.media
-                                    isSearchLoading = false
-                                }
                             } else {
                                 searchResultMedia = emptyList()
                                 isSearchLoading = false
