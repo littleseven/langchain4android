@@ -479,29 +479,69 @@ fun GalleryScreen(
                             context = context,
                             groupedMedia = listOf(searchGroup),
                             selectedIds = selectedIds,
-                            isSelectionMode = false,
+                            isSelectionMode = isSelectionMode,
                             thumbnailPositions = thumbnailPositions,
                             mediaById = searchResultMedia.associateBy { it.id },
                             thumbnailCache = thumbnailCache,
                             onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
                             onMediaClick = { asset ->
-                                // 搜索结果点击：先按 ID 查找索引
-                                var index = allFlatMedia.indexOfFirst { it.id == asset.id }
-                                // ID 未匹配时按 URI 兜底查找
-                                if (index < 0) {
-                                    Logger.w(TAG, "Search result id='${asset.id}' not in allFlatMedia, fallback to URI")
-                                    index = allFlatMedia.indexOfFirst { it.uri == asset.uri }
-                                }
-                                if (index >= 0) {
-                                    selectedMediaIndex = index
+                                if (isSelectionMode) {
+                                    if (selectedIds.contains(asset.id)) {
+                                        selectedIds.remove(asset.id)
+                                    } else {
+                                        selectedIds.add(asset.id)
+                                    }
                                 } else {
-                                    Logger.e(TAG, "Search result NOT found: id='${asset.id}' uri='${asset.uri}'")
+                                    // 搜索结果点击：先按 ID 查找索引
+                                    var index = allFlatMedia.indexOfFirst { it.id == asset.id }
+                                    // ID 未匹配时按 URI 兜底查找
+                                    if (index < 0) {
+                                        Logger.w(TAG, "Search result id='${asset.id}' not in allFlatMedia, fallback to URI")
+                                        index = allFlatMedia.indexOfFirst { it.uri == asset.uri }
+                                    }
+                                    if (index >= 0) {
+                                        selectedMediaIndex = index
+                                    } else {
+                                        Logger.e(TAG, "Search result NOT found: id='${asset.id}' uri='${asset.uri}'")
+                                    }
                                 }
                             },
-                            onMediaLongClick = { },
-                            onDragSelectionStart = { },
-                            onDragSelectionItem = { },
-                            onDragSelectionEnd = { }
+                            onMediaLongClick = { asset ->
+                                if (!isSelectionMode) {
+                                    isSelectionMode = true
+                                    selectedIds.add(asset.id)
+                                }
+                            },
+                            onDragSelectionStart = { asset ->
+                                if (!isSelectionMode) {
+                                    isSelectionMode = true
+                                }
+                                dragSelectionVisitedIds.clear()
+                                dragSelectionTargetSelected = !selectedIds.contains(asset.id)
+                                if (dragSelectionTargetSelected) {
+                                    if (!selectedIds.contains(asset.id)) {
+                                        selectedIds.add(asset.id)
+                                    }
+                                } else {
+                                    selectedIds.remove(asset.id)
+                                }
+                                dragSelectionVisitedIds.add(asset.id)
+                            },
+                            onDragSelectionItem = { asset ->
+                                if (!dragSelectionVisitedIds.add(asset.id)) {
+                                    return@MediaGrid
+                                }
+                                if (dragSelectionTargetSelected) {
+                                    if (!selectedIds.contains(asset.id)) {
+                                        selectedIds.add(asset.id)
+                                    }
+                                } else {
+                                    selectedIds.remove(asset.id)
+                                }
+                            },
+                            onDragSelectionEnd = {
+                                dragSelectionVisitedIds.clear()
+                            }
                         )
                     }
                 }
