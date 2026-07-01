@@ -1,8 +1,8 @@
 # PicMe Wiki
 
 ## 项目文档
-- [🏠 Wiki 首页](Home)
-- [📖 项目 README](../README.md)
+- [🏠 Wiki 首页](./Home.md)
+- [📖 项目 README](../../README.md)
 - [📋 产品定义](../../PRODUCT.md)
 - [🤖 Agent First 治理](../../AGENTS.md)
 

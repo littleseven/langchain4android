@@ -2,11 +2,11 @@
 
 > 文档位置：`docs/03-TECHNICAL-SPECS/TAG_SCAN_STATE_MACHINE.md`
 > 关联实现：`app/src/main/java/com/mamba/picme/domain/tag/scan/TagScanOrchestrator.kt`
-> 最后更新：2026-06-26
+> 最后更新：2026-06-30
 
 ## 1. 设计目标
 
-`TagScanOrchestrator` 通过有限状态机管理 3-Pass TAG 扫描会话（人脸检测 / DBSCAN 聚类 / Qwen 标签）。状态机需要满足：
+`TagScanOrchestrator` 通过有限状态机管理 5-Pass TAG 扫描会话（人脸检测 / DBSCAN 聚类 / Qwen 标签 / MobileCLIP 重编码 / ML Kit 标签）。状态机需要满足：
 
 - **可观测**：UI 可实时感知当前阶段
 - **可中断**：支持暂停、恢复、取消

@@ -443,4 +443,4 @@ adb shell dumpsys meminfo com.mamba.picme | grep Total PSS
 > **参考文档**:
 > - [NFR_SPEC.md](../01-PRODUCT/NFR_SPEC.md) — 非功能性需求规格
 > - [FRAME_SYNC_TECH_SPEC.md](../03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md) — 帧同步技术规格
-> - [CODE_REVIEW_CHECKLIST.md](./CODE_REVIEW_CHECKLIST.md) — CR 检查清单
+> - [CODE_REVIEW_CHECKLIST.md](../05-DEVELOPMENT/CODE_REVIEW_CHECKLIST.md) — CR 检查清单

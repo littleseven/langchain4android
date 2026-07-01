@@ -1,9 +1,11 @@
 # ADR-007: 端侧自然语言相册搜索 — CV 标签 + LLM 混合架构
 
-**状态**: 已实施 (Phase 1-2 完成，Phase 3 UI 开发中)  
-**日期**: 2026-06-21  
-**决策**: RD  
-**依赖**: ADR-005（本地/远程推理协议分离，LLM 解析层复用 Agent Runtime）
+> **状态**: 已全面实施  
+> **日期**: 2026-06-30  
+> **决策**: RD  
+> **依赖**: ADR-005（本地/远程推理协议分离，LLM 解析层复用 Agent Runtime）
+>
+> **实现详情见**: [`docs/03-TECHNICAL-SPECS/GALLERY_SEARCH.md`](../../03-TECHNICAL-SPECS/GALLERY_SEARCH.md)（本 ADR 保留决策背景，具体链路以该文档为唯一事实来源）
 
 ---
 
@@ -217,12 +219,12 @@ search_media 在 System Prompt 中的描述：
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | Phase 1 | DB 扩展 (v6 migration) + ML Kit 依赖 | ✅ 已完成 |
-| Phase 2 | MetadataExtractor + MediaIndexingWorker | ✅ 已完成 |
-| Phase 3 | QueryParser + MediaSearchEngine | ✅ 已完成 |
-| Phase 4 | Prompt 增强 + AiAgentCommand.SearchMedia | ✅ 已完成 |
-| Phase 5 | Gallery 搜索 UI（搜索框+结果展示） | ⏳ 待开始 |
-| Phase 6 | 语音搜索集成（KWS→ASR→搜索） | ⏳ 待开始 |
-| Phase 7 (可选) | CLIP 语义搜索（跨模态） | ⏳ 远期 |
+| Phase 2 | 人脸 Embedding + DBSCAN 聚类 + Qwen 标签 + MobileCLIP 语义编码 | ✅ 已完成 |
+| Phase 3 | QueryParser + QuerySegmenter + ExplicitFirstSearchPipeline + MediaSearchEngine | ✅ 已完成 |
+| Phase 4 | Prompt 增强 + `search_media` Agent 命令 | ✅ 已完成 |
+| Phase 5 | Gallery 搜索 UI（搜索框 + 结果网格 + 选择/删除/分享） | ✅ 已完成 |
+| Phase 6 | MobileCLIP 语义召回集成 | ✅ 已完成 |
+| Phase 7 | 语音搜索集成（KWS→ASR→搜索） | ⏳ 待启动 |
 
 ---
 
@@ -241,8 +243,9 @@ search_media 在 System Prompt 中的描述：
 
 ## 6. 相关文档
 
+- `docs/03-TECHNICAL-SPECS/GALLERY_SEARCH.md` — **相册搜索完整实现链路（SSOT）**
 - `docs/02-ARCHITECTURE/ADR/ADR-005-local-remote-inference-split.md` — LLM 推理协议分离
 - `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` — Agent 运行时架构（search_media 路由）
 - `docs/01-PRODUCT/FEATURES.md` — 智能相册产品需求
 - `app/src/main/java/com/mamba/picme/domain/search/` — 搜索引擎实现
-- `app/src/main/java/com/mamba/picme/data/indexing/` — 元数据索引实现
+- `app/src/main/java/com/mamba/picme/domain/tag/` — TAG 生成与语义编码实现

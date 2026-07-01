@@ -2,7 +2,7 @@
 
 > **边界声明（Boundary Statement）**
 > - 本文档定义 Agent 的运行时架构、Capability 模型与推理模式选型。
-> - 产品目标与验收口径以 [`../01-PRODUCT/FEATURES.md`](./01-PRODUCT/FEATURES.md) 为准。
+> - 产品目标与验收口径以 [`../01-PRODUCT/FEATURES.md`](../01-PRODUCT/FEATURES.md) 为准。
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 [`AGENTS.md`](../../AGENTS.md) 为准。
 > - **重要：`:agent-core` 是 Java 基础库**（ChatModel、Tool、AiServices），Agent 编排层（AgentOrchestrator、CapabilityRegistry 等）在 `:app` 模块的 `app/src/main/java/com/mamba/picme/domain/` 目录下。
 

@@ -1,8 +1,10 @@
 # TAG 中英文国际化方案
 
-> 状态：已落地（Phase 0 + Phase 1 实现完成，detekt / ktlint 通过）  
+> 状态：已落地（Phase 0 + Phase 1 实现完成）  
+> 最后更新：2026-06-30  
+> 维护者：RD Agent  
 > 目标：在**不强制全量重新生成 TAG** 的前提下，让英文语言用户能够搜索、查看已有中文 TAG，并支持后续新生成 TAG 按用户语言输出。  
-> 关联文档：`docs/01-PRODUCT/FEATURES.md`、`app/src/main/java/com/mamba/picme/features/gallery/AGENTS.md`
+> 关联文档：`GALLERY_SEARCH.md`（搜索链路 SSOT）、`AUTO_TAG_GENERATION_SPEC.md`、`TAG_DATABASE_SCHEMA.md`、`docs/06-QA/research/OPUS_MT_TRANSLATION_VALIDATION.md`
 
 ---
 

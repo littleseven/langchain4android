@@ -249,4 +249,4 @@ Phase 4（远期）:
 - [MobileFaceNet](https://github.com/sirius-ai/MobileFaceNet_TF) — 轻量人脸识别
 - [MediaPipe Face Embedder](https://ai.google.dev/edge/mediapipe/solutions/vision/face_embedder) — Google 人脸 Embedding
 - [Off Grid](https://github.com/brendmung/AbodeLLM) — Android 端侧 VL 开源 App（SmolVLM 运行验证）
-- [ADR-007](docs/02-ARCHITECTURE/ADR/ADR-007-natural-language-photo-search.md) — 相册搜索技术方案
+- [ADR-007](../02-ARCHITECTURE/ADR/ADR-007-natural-language-photo-search.md) — 相册搜索技术方案

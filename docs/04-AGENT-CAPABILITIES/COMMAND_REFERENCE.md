@@ -2,7 +2,7 @@
 
 > **边界声明（Boundary Statement）**
 > - 本文档定义所有 Agent 命令的语法、参数与使用示例。
-> - 架构设计以 [`../02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](./02-ARCHITECTURE/AGENT_ARCHITECTURE.md) 为准。
+> - 架构设计以 [`../02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](../02-ARCHITECTURE/AGENT_ARCHITECTURE.md) 为准。
 > - 交互规范以 [`../01-PRODUCT/FEATURES.md`](../01-PRODUCT/FEATURES.md) 为准。
 
 **模块定位**: Agent 命令语法与使用示例  

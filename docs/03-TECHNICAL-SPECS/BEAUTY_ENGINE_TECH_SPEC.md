@@ -384,8 +384,8 @@ while (isRendering && !Thread.interrupted()) {
 #### 3.5.2 映射实现参考
 
 **非轮廓 73 点（33-105）**的具体映射关系请参考：
-- [MediaPipe468Adapter.kt](../beauty-engine/src/main/java/com/picme/beauty/internal/facedetect/adapter/MediaPipe468Adapter.kt) - 生产环境映射
-- [FaceLandmarkOverlay.kt](../app/src/main/java/com/picme/features/gallery/components/FaceLandmarkOverlay.kt) - 静态图调试映射与可视化
+- [MediaPipe468Adapter.kt](../../beauty-engine/src/main/java/com/mamba/picme/beauty/internal/facedetect/adapter/MediaPipe468Adapter.kt) - 生产环境映射
+- [FaceLandmarkOverlay.kt](../../app/src/main/java/com/mamba/picme/features/gallery/components/FaceLandmarkOverlay.kt) - 静态图调试映射与可视化
 
 **映射原则**：
 1. **语义优先**：每个 106 点找到 MediaPipe 中语义对应的固定点
@@ -660,10 +660,10 @@ QA 相关内容已提取到独立文档：`docs/06-QA/QA_EXECUTION_CHECKLIST.md`
 - `AGENTS.md` — AI Agent 操作规范
 - `CAMERA_PREVIEW_TECH_SPEC.md` — 相机预览与坐标系统规范
 - `BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` — 大美丽 QA 独立执行清单
-- `beauty-engine/src/main/java/com/picme/beauty/api/` — 对外稳定 API（`BeautyParams`、`BeautyPreviewProvider`、`BeautyPreviewCapability`、`BeautyPreviewEngine`）
-- `beauty-engine/src/main/java/com/picme/beauty/render/` — GL 渲染管线核心实现
-- `app/src/main/java/com/picme/features/camera/CameraScreen.kt` — 预览绑定、容灾回退与调试浮层
-- `app/src/main/java/com/picme/features/camera/CameraPreviewStrategies.kt` — 引擎策略路由
+- `beauty-engine/src/main/java/com/mamba/picme/beauty/api/` — 对外稳定 API（`BeautyParams`、`BeautyPreviewProvider`、`BeautyPreviewCapability`、`BeautyPreviewEngine`）
+- `beauty-engine/src/main/java/com/mamba/picme/beauty/render/` — GL 渲染管线核心实现
+- `app/src/main/java/com/mamba/picme/features/camera/CameraScreen.kt` — 预览绑定、容灾回退与调试浮层
+- `app/src/main/java/com/mamba/picme/features/camera/CameraPreviewStrategies.kt` — 引擎策略路由
 
 ---
 
@@ -813,7 +813,7 @@ verts[i * 2 + 1] += eyeAxisY * axisOffset * str * slimRadius
 
 ### A.9 相关文件
 
-- `app/src/main/java/com/picme/core/image/GpuBeautyProcessor.kt` - 正向映射实现
+- `app/src/main/java/com/mamba/picme/core/image/GpuBeautyProcessor.kt` - 正向映射实现
 - `beauty-engine/src/main/assets/shaders/warp.glsl` - 反向映射实现
 
 ---

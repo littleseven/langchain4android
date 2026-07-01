@@ -225,6 +225,7 @@ com.mamba
 | 功能 | 说明 |
 |------|------|
 | **自然语言交互** | "帮我把天空调蓝"、"找出去年夏天的照片"、"这张照片磨皮 50" |
+| **自然语言相册搜索** | 规则解析 + MobileCLIP 语义召回 + 多维度 SQL 召回，全端侧执行 |
 | **Agent 编排** | AgentOrchestrator + CapabilityRegistry + PrivacyGuard 完整架构 |
 | **本地/远程双推理** | 本地 MNN-LLM（Qwen） + 远程 OpenAI 标准协议 |
 | **自研美颜引擎** | 全自研 OpenGL ES + EGL 渲染管线 |
@@ -266,7 +267,7 @@ adb install -r app/build/outputs/apk/debug/picme-debug.apk
 | **产品** | [`PRODUCT.md`](PRODUCT.md) | 产品定义、核心命题 |
 | **架构** | [`docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md) | Agent 架构设计 |
 | **决策** | [`docs/02-ARCHITECTURE/ADR/`](docs/02-ARCHITECTURE/ADR/) | 架构决策记录（ADR-001 ~ ADR-007） |
-| **技术规范** | [`docs/03-TECHNICAL-SPECS/`](docs/03-TECHNICAL-SPECS/) | 美颜引擎、帧同步、人脸检测、远程推理 |
+| **技术规范** | [`docs/03-TECHNICAL-SPECS/`](docs/03-TECHNICAL-SPECS/) | 相册搜索、TAG 生成、美颜引擎、帧同步、人脸检测、远程推理 |
 | **Agent 能力** | [`docs/04-AGENT-CAPABILITIES/`](docs/04-AGENT-CAPABILITIES/) | Capability 实现指南、命令参考 |
 | **开发规范** | [`docs/05-DEVELOPMENT/`](docs/05-DEVELOPMENT/) | 工作流、CR 检查清单 |
 
@@ -294,12 +295,14 @@ adb install -r app/build/outputs/apk/debug/picme-debug.apk
 
 ### 度量指标
 
-| 指标 | 当前 | 目标 |
-|------|------|------|
-| Agent 生成代码占比 | ~65% | > 80% |
-| Self-Heal 成功率 | ~75% | > 85% |
-| 文档-代码一致性 | ~95% | > 98% |
-| 人工介入频次 | ~15% | < 10% |
+> 以下度量为实验性目标，当前基线待重新采集，不以未经验证的数字作为项目承诺。
+
+| 指标 | 说明 |
+|------|------|
+| Agent 生成代码占比 | 目标 > 80% |
+| Self-Heal 成功率 | 目标 > 85% |
+| 文档-代码一致性 | 目标 > 98% |
+| 人工介入频次 | 目标 < 10% |
 
 ---
 

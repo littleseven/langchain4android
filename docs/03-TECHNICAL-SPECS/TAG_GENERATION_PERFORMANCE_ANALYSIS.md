@@ -8,14 +8,14 @@
 
 ## 1. 当前架构概览
 
-TAG 生成采用三阶段管道（[TagGenerationScheduler](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt) + [TagGenerationPipeline](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt)）：
+TAG 生成采用三阶段管道（[TagGenerationScheduler](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt) + [TagGenerationPipeline](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt)）：
 
 ```
 Pass 1 (人脸 ROI + 106关键点 + MobileFaceNet Embedding)  →  Pass 2 (DBSCAN 全局聚类)  →  Pass 3 (Qwen3.5-2B 图像理解)
   ~10-50ms + ~20-80ms + ~30-60ms                                 ~2-5s (一次)                  ~2-8s/张
 ```
 
-执行模型：**单线程 Foreground Service**（[TagGenerationService](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/service/tag/TagGenerationService.kt)），专用单线程调度器 `singleThreadDispatcher` + 3000ms/500ms 两级节流。
+执行模型：**单线程 Foreground Service**（[TagGenerationService](../../app/src/main/java/com/mamba/picme/service/tag/TagGenerationService.kt)），专用单线程调度器 `singleThreadDispatcher` + 3000ms/500ms 两级节流。
 
 ---
 
@@ -34,7 +34,7 @@ Pass 1 (人脸 ROI + 106关键点 + MobileFaceNet Embedding)  →  Pass 2 (DBSCA
 
 #### 瓶颈 1：`THROTTLE_MS = 500ms` — 硬节流浪费
 
-[TagGenerationScheduler.kt#L52](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt#L52)
+[TagGenerationScheduler.kt#L52](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt#L52)
 ```kotlin
 private const val THROTTLE_MS = 500L  // 每张照片强制 delay
 ```
@@ -45,7 +45,7 @@ Pass 1 和 Pass 3 的每张照片循环末尾都执行 `delay(THROTTLE_MS)`。Pa
 
 Qwen3.5-2B 多模态推理使用 `engineMutex` 串行保护，每张约 2-8s（CPU 模式）。9000 张的理论下限 (2s/张) 即 **5 小时**。
 
-相关代码：[LocalLlmEngine.imageInference()](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/runtime-core/src/main/java/com/mamba/picme/agent/core/inference/local/llm/LocalLlmEngine.kt#L389-L430)
+相关代码：[LocalLlmEngine.imageInference()](../../runtime-core/src/main/java/com/mamba/picme/agent/core/inference/local/llm/LocalLlmEngine.kt#L389-L430)
 - 512px Bitmap → Vision Encoder → LLM Decode（128 tokens）
 - Decode 阶段约 128 × 30ms ≈ 3.8s（CPU 推理）
 - `MnnGlobalReleaseLock` 全局锁串行化所有 MNN 操作
@@ -54,7 +54,7 @@ Qwen3.5-2B 多模态推理使用 `engineMutex` 串行保护，每张约 2-8s（C
 
 Pass 1 以 640px 加载，Pass 3 重新以 512px 加载。
 
-[TagGenerationPipeline.kt#L91](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt#L91) 和 [pipeline#L216](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt#L216)
+[TagGenerationPipeline.kt#L91](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt#L91) 和 [pipeline#L216](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt#L216)
 
 两次 `ContentResolver.openInputStream()` + `BitmapFactory.decodeStream()`，每张浪费 20-50ms。
 
@@ -159,7 +159,7 @@ Pass 1 每次循环写入 `face_embeddings` 和更新 `faceRoiResult`，Room 的
 
 **理由**：Pass 1 推理仅 70-150ms/张，功耗极小，500ms 节流导致 3-7 倍开销浪费。
 
-**改动**：[TagGenerationScheduler.kt](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt) — 移除 `scanAll()`、`scanIncremental()`、`scanPass1()` 中的 `delay(THROTTLE_MS)`。
+**改动**：[TagGenerationScheduler.kt](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt) — 移除 `scanAll()`、`scanIncremental()`、`scanPass1()` 中的 `delay(THROTTLE_MS)`。
 
 **收益**：Pass 1 从 **100 分钟 → 25 分钟**（+72 min）
 
@@ -169,7 +169,7 @@ Pass 1 每次循环写入 `face_embeddings` 和更新 `faceRoiResult`，Room 的
 
 **理由**：前 40-50 个 token 已足够表达场景/活动/tags，后续 token 冗余。
 
-**改动**：[TagGenerationPipeline.kt#L53](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt#L53)
+**改动**：[TagGenerationPipeline.kt#L53](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationPipeline.kt#L53)
 ```kotlin
 private const val QWEN_MAX_TOKENS = 64
 ```
@@ -194,7 +194,7 @@ private const val QWEN_MAX_TOKENS = 64
 
 **理由**：Qwen 的 Visual Encoder 和 LLM Decode 在 GPU（Adreno/Mali）上可提速 2-3x。
 
-**改动**：[TagGenerationScheduler.kt](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt#L844) `ensureModelLoaded()` 中传入 `useOpencl=true`。
+**改动**：[TagGenerationScheduler.kt](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt#L844) `ensureModelLoaded()` 中传入 `useOpencl=true`。
 
 **收益**：Qwen 推理从 ~2.5s → ~1s，Pass 3 从 **7 小时 → 3.5 小时**（+3.5 hrs）。
 
@@ -276,7 +276,7 @@ Pass 1 现在每条 embedding 单独 insert，可以批量 50 条/事务。
 
 ## 5. Pass 2 DBSCAN 性能评估
 
-当前 DBSCAN 是朴素 O(n²) 实现 [scheduler#L710-L774](file:///Users/guoshuai/AndroidStudioProjects/langchain4android/app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt#L710-L774)：
+当前 DBSCAN 是朴素 O(n²) 实现 [scheduler#L710-L774](../../app/src/main/java/com/mamba/picme/domain/tag/TagGenerationScheduler.kt#L710-L774)：
 
 ```kotlin
 for (i in 0 until n)          // n = 所有 face embedding 数量

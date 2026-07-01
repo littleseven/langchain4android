@@ -1,10 +1,9 @@
 # 相册自动 Tag 生成技术方案
 
-> 利用本地已有工具链（人脸 ROI 检测 + 人脸关键点 → 人脸聚类 + Qwen3.5-2B 多模态模型）为相册照片自动生成结构化标签。
->
-> **相关文档**：
-> - TAG 扫描状态机：`TAG_SCAN_STATE_MACHINE.md`
-> - OpenCL 超时与降级：`MNN_LLM_PERFORMANCE_OPTIMIZATION.md`
+> **状态**: 已实施  
+> **最后更新**: 2026-06-30  
+> **维护者**: RD Agent  
+> **相关文档**: `GALLERY_SEARCH.md`（相册搜索 SSOT）、`TAG_DATABASE_SCHEMA.md`、`TAG_I18N_DESIGN.md`、`TAG_SCAN_STATE_MACHINE.md`、`TAG_GENERATION_PERFORMANCE_ANALYSIS.md`
 
 ---
 
@@ -12,118 +11,82 @@
 
 ### 1.1 目标
 
-为相册中每张照片自动生成多维度标签（Tag），支撑：
-- **人脸维度**：照片中出现了「谁」（通过人脸聚类 + 用户命名）
+为相册中每张照片自动生成多维度标签（Tag），支撑 `MediaSearchEngine` 的自然语言搜索召回：
+
+- **人脸维度**：照片中出现了「谁」（通过人脸检测 + 人脸 Embedding + DBSCAN 聚类）
 - **内容维度**：照片的场景、物体、活动（通过 Qwen 图像理解）
+- **语义维度**：MobileCLIP 图像-文本对齐 embedding（用于语义搜索）
+- **ML Kit 快速标签**：英文物体/场景标签（用于补充召回）
 - **时间/地点维度**：已有的 EXIF 元数据
 
-### 1.2 现有资源
+### 1.2 核心模块
 
-| 资源 | 归属模块 | 算法/模型 | 接口 | 耗时量级 |
-|------|----------|----------|------|----------|
-| 人脸 ROI 检测 | `beauty-api` → `FaceDetector` | **InsightFace Det10G**（ONNX/MNN 后端）或 **MediaPipe** | `FaceDetector.detectPhoto()` → `FaceDetectionResult?` | ~10-50ms |
-| 人脸关键点检测 | `MnnLandmarkDetector` | **InsightFace 2D106**（106 点，MNN 后端）或 **MediaPipe 468** | `MnnLandmarkDetector.detectLandmarks()` → `FloatArray?` | ~20-80ms |
-| 人脸特征提取 | **已实现**：`FaceClusterEngine` + `MnnEmbeddingExtractor` 加载 `w600k_mbf.mnn` | **MobileFaceNet** → 512 维特征向量 | `FaceClusterEngine.extractFeature()` → `FloatArray` | ~30-60ms |
-| 人脸聚类（人物去重） | **已实现**：增量式余弦距离匹配 + DBSCAN | **增量式余弦距离匹配 + 定期 DBSCAN 重聚** | `FaceClusterEngine.matchCluster()` → `personId` | ~5-20ms/对比 |
-| Qwen3.5-2B 多模态图像理解 | `LocalLlmEngine` | **Qwen3.5-2B**（MNN-LLM 多模态运行时 `visual.mnn` 视觉编码器） | `LocalLlmEngine.imageInference()` → `String` | ~2-8s |
-| **MobileCLIP 语义编码** | **已实现**：`MobileClipEngine` | **MobileCLIP-S0**（Apple 轻量化 CLIP） | `MobileClipEngine.encodeImage()` → `FloatArray` | **~50-100ms** |
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| `TagGenerationScheduler` | `domain/tag/TagGenerationScheduler.kt` | 模型加载、单张处理、DBSCAN 聚类、OpenCL 守护 |
+| `TagGenerationPipeline` | `domain/tag/TagGenerationPipeline.kt` | 单张照片的 5-Pass 原子处理 |
+| `TagScanOrchestrator` | `domain/tag/scan/TagScanOrchestrator.kt` | 持久化任务队列、会话状态机、暂停/恢复/取消/重试 |
+| `TagScanTaskEntity` | `data/local/entity/TagScanTaskEntity.kt` | 任务持久化实体及 `TagScanPass` 枚举 |
+| `TagCategory` | `domain/tag/TagCategory.kt` | 用户可见类别与 Pass 阶段映射 |
+| `OpenClGuardian` | `domain/tag/OpenClGuardian.kt` | Pass 3 前 warmup 与 OpenCL → CPU 降级 |
+| `MobileClipEngine` | `domain/tag/MobileClipEngine.kt` | MobileCLIP-S0 语义编码 |
+| `MlKitTagExtractor` | `domain/tag/MlKitTagExtractor.kt` | ML Kit Image Labeler 英文标签提取 |
+| `FaceClusterEngine` | `domain/tag/FaceClusterEngine.kt` | MobileFaceNet Embedding + DBSCAN 聚类 |
+| `TagNormalizer` / `ControlledVocab` | `domain/tag/TagNormalizer.kt` | Qwen 输出规范化与受控词表映射 |
+| `TagGenerationService` | `service/tag/TagGenerationService.kt` | 前台 Service，驱动 Orchestrator 并暴露进度 |
+| `TagGenerationControlScreen` | `features/gallery/components/TagGenerationControlScreen.kt` | 3-Pass 控制与按类别/时间范围重新生成 UI |
 
-### 1.3 管道中各模型的推理后端
+### 1.3 5-Pass 管道总览
 
-每个模型可通过 `DetectionPipelineConfig` 灵活配置推理后端：
-
-| 模型 | 可选后端 | 默认配置 |
-|------|----------|----------|
-| Det10G（ROI 检测） | ONNX / MNN / NCNN / TFLite | ONNX + AUTO 设备 |
-| InsightFace 2D106（关键点） | ONNX / MNN | ONNX + AUTO 设备 |
-| MobileFaceNet（特征提取） | MNN（固定） | MNN + CPU（人脸 embedding 模型较小，无需 GPU） |
-| Qwen3.5-2B（图像理解） | MNN-LLM（固定） | GPU（OpenCL）优先 → CPU 降级 |
-
-> **MobileFaceNet 集成说明**：当前代码库已实现 MobileFaceNet 特征提取。`FaceClusterEngine` 通过 `MnnEmbeddingExtractor` 加载模型中心下载的 `w600k_mbf.mnn`，使用 MNN 后端提取 512 维 L2 归一化 embedding，并存储到 `face_embeddings` 表（`embedding: ByteArray`）。模型缺失时会降级为零向量，聚类将退化为全量新建簇。
-
-### 1.4 已有数据模型
-
-``kotlin
-// app/.../data/local/entity/PersonEntity.kt - 已有
-@Entity(tableName = "persons")
-data class PersonEntity(
-    @PrimaryKey(autoGenerate = true)
-    val personId: Long = 0,
-    val name: String? = null,              // 用户命名（如"张三"）
-    val coverMediaId: Long? = null,        // 簇内代表性照片
-    val faceCount: Int = 0,
-    val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
-)
-
-// app/.../data/local/entity/FaceEmbeddingEntity.kt - 已有
-@Entity(
-    tableName = "face_embeddings",
-    foreignKeys = [
-        ForeignKey(
-            entity = PersonEntity::class,
-            parentColumns = ["personId"],
-            childColumns = ["personId"],
-            onDelete = ForeignKey.SET_NULL
-        )
-    ],
-    indices = [Index("personId")]
-)
-data class FaceEmbeddingEntity(
-    @PrimaryKey(autoGenerate = true)
-    val embeddingId: Long = 0,
-    val mediaId: Long,
-    val personId: Long? = null,
-    val embedding: ByteArray,              // MobileFaceNet 512 维特征向量
-    val createdAt: Long = System.currentTimeMillis()
-)
 ```
+照片入库 / 用户触发
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│ Pass 1: FACE_DETECTION                       │
+│ • 人脸 ROI 检测 + 106 关键点                 │
+│ • MobileFaceNet 512 维人脸 Embedding         │
+│ • MobileCLIP 语义 Embedding（Base64）        │
+│ 写入: faceRoiResult / face_embeddings        │
+│       semanticEmbedding / lastTagScanPasses  │
+└─────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│ Pass 2: DBSCAN                               │
+│ • 全局人脸聚类 → persons / faceId            │
+└─────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│ Pass 3: QWEN_TAGGING                         │
+│ • Qwen 3.5-2B 图像理解                       │
+│ • 中文标签 + ControlledVocab 规范化          │
+│ 写入: labels JSON                            │
+└─────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│ Pass 5: ML_KIT_TAGGING                       │
+│ • ML Kit Image Labeler 英文标签              │
+│ 写入: mlKitLabels JSON                       │
+└─────────────────────────────────────────────┘
 
-`MediaAsset`（Room 表 `media_assets`）已有预留字段：
-
-```kotlin
-@Entity(tableName = "media_assets")
-data class MediaAsset(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
-    val uri: String,
-    val type: MediaType,
-    val captureDate: Long,
-    val fileName: String,
-    val duration: Long? = null,
-    val hasFace: Boolean = false,       // 是否含人脸
-    val faceId: String? = null,         // 人脸聚类分组 ID
-    val labels: String? = null,         // 标签（逗号分隔，例如 "聚会,室内,多人")
-    val ocrText: String? = null,        // OCR 识别文字
-    val latitude: Double? = null,
-    val longitude: Double? = null,
-    val locationName: String? = null,
-    val indexedAt: Long? = null
-)
+Pass 4: MOBILE_CLIP_ENCODING（保留枚举值，用于兼容历史任务/单独重编码场景；
+        常规扫描已将 MobileCLIP 内联合并到 Pass 1）
 ```
 
 ---
 
-## 2. Tag 分类体系
+## 2. TAG 分类体系
 
-照片的 Tag 分为三个层次，由不同工具产出：
-
-```
-┌──────────────────────────────────────────────────┐
-│                   Tag 体系                         │
-├──────────┬──────────────────┬─────────────────────┤
-│  L1:人脸 │  L2:内容         │  L3:元数据          │
-│          │                  │                     │
-│ - 人物ID │ - 场景(室内/户外) │ - 日期(早/中/晚)    │
-│ - 人数   │ - 活动(聚会/运动) │ - 季节(春/夏/秋/冬)  │
-│ - 多人/单人 │ - 物体(食物/猫) │ - 地点(家/公司)     │
-│          │ - 风格(自拍/合影) │ - 来源(微信/相机)    │
-├──────────┴──────────────────┴─────────────────────┤
-│  L1: FaceDetector + FaceCluster                   │
-│  L2: Qwen3.5-2B imageInference                    │
-│  L3: EXIF + MediaStore + 已有 source 字段          │
-└──────────────────────────────────────────────────┘
-```
+| 层级 | 来源 | 存储字段 / 表 | 示例 |
+|------|------|---------------|------|
+| L1 人脸 | FaceDetector + FaceClusterEngine | `faceRoiResult` JSON、`face_embeddings` 表、`persons` 表、`media_assets.faceId` | `hasFace=true`, `faceCount=2`, `personId=3` |
+| L2 内容 | Qwen 3.5-2B | `media_assets.labels` JSON | `scene=户外`, `activity=旅行`, `tags=["风景","山"]` |
+| L3 元数据 | EXIF / MediaStore / 逆地理编码 | `captureDate`, `locationName`, `source`, `latitude`/`longitude` | `time:afternoon`, `location:北京` |
+| L4 ML Kit 标签 | ML Kit Image Labeler | `media_assets.mlKitLabels` JSON | `["Outdoor","Food","Plant"]` |
+| L5 语义向量 | MobileCLIP-S0 | `media_assets.semanticEmbedding` Base64 | 512 维 L2 归一化向量 |
 
 ### 2.1 L1 人脸标签
 
@@ -132,660 +95,290 @@ data class MediaAsset(
 | `has_face` | ROI 检测 | `true` / `false` |
 | `face_count` | ROI 检测 | `1` / `2` / `3+` |
 | `person:{name}` | 人脸聚类 + 用户命名 | `person:张三` |
-| `group_photo` | face_count >= 3 | `true` |
-| `selfie` | face_count == 1 + 镜头方向 | `true` |
-| `face_unknown:N` | 聚类未命名 | `face_unknown:3`（第3个未命名人脸簇） |
+| `group_photo` | `face_count >= 2` | `true` |
+| `selfie` | `face_count == 1` | `true` |
 
 ### 2.2 L2 内容标签（Qwen 产出）
 
-Qwen 输出的标签经过 [4.6 节](#46-受控词表与后处理) 的受控词表规范化后，最终标签值限定为以下类别：
+Qwen 输出经 `TagNormalizer` 映射到 `ControlledVocab` 后写入 `labels` JSON：
 
-| 类别 | 受控词表（部分示例） |
-|------|--------------------|
-| 场景 | `室内`, `户外`, `办公室`, `公园`, `街道`, `餐厅`, `咖啡厅`, `海边`, `山脉`, `城市`, `乡村`, `花园`, `阳台`, `停车场`, `河边`, `森林`, `雪地`, `沙漠`, `泳池`, `体育馆`, `教室`, `商场`, `车内` |
-| 活动 | `吃饭`, `旅行`, `运动`, `会议`, `购物`, `聚会`, `散步`, `遛狗`, `拍照`, `自拍`, `阅读`, `工作`, `学习`, `开车`, `休息`, `游泳`, `爬山`, `骑行`, `跑步`, `婚礼`, `生日`, `节日`, `遛娃` |
-| 物体 | `食物`, `饮品`, `甜点`, `咖啡`, `茶`, `宠物`, `猫`, `狗`, `花`, `植物`, `书`, `手机`, `电脑`, `车`, `婴儿`, `蛋糕`, `酒`, `水果` |
-| 氛围/光线 | `日出`, `日落`, `白天`, `夜晚`, `晴天`, `阴天`, `雨天`, `雪天`, `明亮`, `昏暗`, `暖色调`, `冷色调` |
-| 人物关系 | `单人`, `双人`, `多人`, `合影`, `全家福`, `自拍`, `情侣`, `亲子`, `朋友` |
+| 类别 | 字段 | 示例 |
+|------|------|------|
+| 场景 | `scene` | `户外`、`办公室`、`海边` |
+| 活动 | `activity` | `旅行`、`吃饭`、`运动` |
+| 物体 | `objects` | `["山","天空"]` |
+| 标签 | `tags` | `["风景","旅行","户外"]` |
+| 摘要 | `summary` | `一家人在公园野餐的温馨场景` |
 
-> 所有标签统一使用中文。受控词表在开发过程中可持续扩展。
+> **语言策略**：Qwen 统一输出中文；未命中受控词表的原始词保留在 `nonStandard` 中，仍然可被 LIKE 搜索命中。
 
-### 2.3 L3 元数据标签（EXIF / MediaStore）
+### 2.3 L3 元数据标签
 
 | 标签 | 来源 | 示例值 |
 |------|------|--------|
 | `time:morning/afternoon/evening/night` | `captureDate` | `time:afternoon` |
 | `season:spring/summer/autumn/winter` | `captureDate` | `season:summer` |
-| `source:{source}` | `MediaAsset.source` | `source:wechat`, `source:camera` |
-| `location:{name}` | `locationName` | `location:home`, `location:beijing` |
+| `source:{source}` | `MediaAsset.source` | `source:wechat` |
+| `location:{name}` | `locationName` | `location:北京` |
+
+### 2.4 L4 ML Kit 英文标签
+
+- ML Kit `ImageLabeler` 输出英文标签，按置信度过滤后写入 `mlKitLabels` JSON 数组。
+- 不随存储翻译，避免引入额外延迟与翻译错误。
+- 跨语言搜索由 `QuerySegmenter` / `MediaSearchEngine` 的 LLM 语义解析层处理，或依赖独立翻译映射（见 `TAG_I18N_DESIGN.md`）。
 
 ---
 
 ## 3. 执行管道（Pipeline）设计
 
-### 3.1 整体流程
+### 3.1 Pass 1：人脸检测 + Embedding + MobileCLIP 语义编码
 
-```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────────┐
-│ 照片入库 │───→│ Stage 1  │───→│ Stage 2  │───→│  Stage 3     │
-│ 或主动触发│    │ ROI 检测  │    │ 人脸聚类  │    │ Qwen 图像理解 │
-└──────────┘    └──────────┘    └──────────┘    └──────┬───────┘
-       │               │               │               │
-       ↓               ↓               ↓               ↓
-  ┌─────────┐    ┌──────────┐    ┌───────────┐    ┌──────────┐
-  │            │  │ has_face │    │ faceId    │    │ labels   │
-  │ MediaAsset │  │ face_count│    │ person:X  │    │ (JSON)   │
-  │            │  │          │    │           │    │          │
-  └─────────┘    └──────────┘    └───────────┘    └──────────┘
-```
-
-### 3.2 执行顺序决策
-
-**核心原则**：快速失败、资源降级、逐步深入。**轻量任务优先，重任务后置**。
-
-```
-Stage 1 (Face ROI) ─── 有人脸? ──→ YES ──→ Stage 2 (Face Landmark + Cluster)
-     │                                │
-     │ NO                             │
-     ↓                                ↓
-  Stage 3 (Qwen without face context)  Stage 3 (Qwen with face context)
-```
-
-**2026-06-27 优化：MobileCLIP 语义编码提前至 Pass 1 后**
-
-由于 MobileCLIP 语义编码（~50-100ms）远快于 Qwen 图像理解（~2-8s），且完全不依赖 Pass 2（聚类）和 Pass 3（标签），**将 Pass 4 从最后移至 Pass 1 之后、Pass 2 之前执行**。
-
-优化后的 4-Pass 执行顺序：
-
-| 顺序 | 步骤 | 耗时 | 理由 |
-|------|------|------|------|
-| 1st | Face ROI 检测 + Embedding | **~30-80ms** | 最轻量，快速过滤无人脸照片 |
-| **1.5th** | **MobileCLIP 语义编码** | **~50-100ms** | **提前执行**：无依赖、速度快，语义搜索可尽早可用 |
-| 2nd | 人脸聚类（DBSCAN） | ~5-20ms/对比 | 中等开销，仅对含人脸照片执行 |
-| 3rd | Qwen 图像理解 | **~2-8s** | 最重，最后执行；利用前两步结果构造精准 prompt |
-
-**收益**：
-1. **语义搜索提前可用**：Pass 1.5 完成后，所有照片已有语义 embedding，用户可立即使用文本搜图
-2. **无额外 I/O 开销**：MobileCLIP 独立加载 512px Bitmap，不依赖 Pass 1 的 640px Bitmap
-3. **失败隔离**：MobileCLIP 编码失败不影响 Pass 2/3 继续执行（try-catch 隔离）
-
-### 3.3 Stage 1：人脸 ROI + 106 关键点检测
-
-**使用模型**：
-- ROI 检测：**InsightFace Det10G**（ONNX/MNN 后端，`DetectionPipelineConfig.roiDetector = DET10G`）
-- 106 关键点：**InsightFace 2D106**（MNN 后端，`DetectionPipelineConfig.landmarkDetector = INSIGHTFACE_2D106`）
-- 备选：**MediaPipe Face Detection**（TFLite 后端）
-
-> 该阶段输出的人脸人像106点坐标用于 `face_count` 统计和 `selfie`/`group_photo` 判定，**不能直接用于人脸聚类确认一个人**——这是第二个阶段需要专门特征模型的原因。
-
-**执行流程**：
-
-```
-输入: Bitmap（缩放到 640px 最长边）
-输出: FaceDetectionResult? (roiRect, landmarks106)
-
-伪代码:
-fun stage1(bitmap: Bitmap): Stage1Result {
-    val result = faceDetector.detectPhoto(bitmap, lensFacing)
-    if (result == null) return Stage1Result(hasFace = false, faceCount = 0)
-    
-    // FaceDetectionResult.landmarks106 是归一化坐标 (0~1)
-    // 格式：[x0, y0, x1, y1, ...] = 106个点 × 2坐标 = 212个float
-    // 每张人脸一个独立的106点集合
-    val pointsPerFace = 106 * 2
-    val faceCount = result.landmarks106.size / pointsPerFace
-    val roiRects = extractRois(result.landmarks106, bitmap.width, bitmap.height)
-    
-    return Stage1Result(
-        hasFace = true,
-        faceCount = faceCount,
-        roiRects = roiRects,        // 每张脸的 ROI
-        rawLandmarks = result.landmarks106
-    )
-}
-```
-
-**耗时优化**：
-- 将 Bitmap 缩放到 640px 最长边（MNN 人脸检测推荐分辨率）
-- 使用 `MnnResourceManager.acquireFaceDetection()` + `releaseFaceDetection()` 管理模型加载
-- 不缩放直接使用原始尺寸会显著增加延时（>200ms）
-
-### 3.4 Stage 2：MobileFaceNet 特征提取 → 人脸聚类
-
-> **关键澄清**：Stage 1 的 106 点关键点只是人脸轮廓的几何坐标，**不能用于做人脸识别或聚类**。
-> 确认一个人需要专门的 face embedding 模型。本项目选用 **MobileFaceNet**（轻量化 CNN），
-> 输入对齐后的人脸 ROI → 输出 512 维特征向量。
-
-**使用模型**：
-- 特征提取：**MobileFaceNet**（MobileNet 变体，专为人脸识别优化的轻量 CNN）
-  - 输入：112×112 RGB 对齐人脸 ROI
-  - 输出：512 维特征向量（`FloatArray`）
-  - 推理后端：待定（建议 MNN，与现有推理栈一致）
-- 聚类算法：**增量式余弦距离匹配 + 定期 DBSCAN 重聚**
-  - 距离度量：余弦距离（cosine distance）
-  - 匹配阈值：> 0.6 归入已有簇
-
-> **实现状态**：代码库已预置 `FaceEmbeddingEntity`（存储 512 维特征向量）和 `PersonEntity`（人物去重表）
-> 两个 Room 表。但 MobileFaceNet 的模型加载和推理代码尚未实现，是 Stage 2 需要新增的核心模块。
-
-**Step 2a - 人脸 ROI 对齐与裁剪**：
-
-```
-输入: Bitmap + Stage1 输出的 roiRects
-输出: 对齐后的 112×112 人脸 ROI Bitmap
-
-流程:
-1. 对每张人脸，用 Stage 1 的 landmarks106 做仿射变换对齐
-   （将双眼映射到固定位置，标准化人脸姿态）
-2. 裁剪并缩放到 112×112（MobileFaceNet 标准输入尺寸）
-```
-
-**Step 2b - MobileFaceNet 特征提取**：
-
-```
-fun stage2ExtractFeatures(bitmap: Bitmap, roi: RectF, landmarks106: FloatArray): FloatArray {
-    // 1. 用 landmarks106 做仿射对齐 → 112×112 标准化人脸图
-    val alignedFace = alignFace(bitmap, landmarks106)
-    
-    // 2. MobileFaceNet 推理 → 512 维特征向量
-    //    新模块，通过 MnnFaceDetector 类似的 JNI 桥接方式接入
-    val feature: FloatArray = mobileFaceNet.extract(alignedFace)
-    
-    return feature  // 512维，FloatArray
-}
-```
-
-**Step 2c - 增量聚类匹配**：
-
-```
-输入: 512 维特征向量
-输出: personId（已有簇）或新建簇
-
-算法: 增量式余弦距离匹配
-
-流程:
-1. 计算新特征向量与所有簇质心的余弦距离
-2. 找到距离最近的簇：
-   - 余弦相似度 > 0.6 → 归入该簇，更新质心（滑动平均）
-   - 否则 → 新建簇，以该特征为初始质心
-3. 每积累 N=100 张新特征，触发全量 DBSCAN 重聚类
-   （避免增量漂移，保证聚类质量）
-4. 更新 FaceEmbeddingEntity 和 PersonEntity
-```
-
-**存入已有 Room 表**：
+**输入**: 照片 URI  
+**输出**: `Stage1WithEmbeddingsResult`
 
 ```kotlin
-// 写入 face_embeddings 表
-val embeddingEntity = FaceEmbeddingEntity(
-    mediaId = asset.id,
-    personId = matchedPerson?.personId,  // null 表示新建簇
-    embedding = feature.toByteArray()     // 512 维 FloatArray → ByteArray
-)
-faceEmbeddingDao.insert(embeddingEntity)
-
-// 更新 persons 表（已有）
-personDao.upsert(personEntity)
+suspend fun stage1WithEmbeddings(
+    uri: String,
+    lensFacing: Int,
+    mediaId: Long
+): Stage1WithEmbeddingsResult
 ```
 
-### 3.5 Stage 3：Qwen3.5-2B 图像理解
+**处理步骤**:
 
-**使用模型**：
-- 多模态基础模型：**Qwen3.5-2B**（通义千问 3.5-2B 端侧模型）
-- 推理引擎：**MNN-LLM**（`visual.mnn` 视觉编码器 + `qwen3.5-2b.mnn` 语言模型）
-- **配置要求**：`runtime config` 中必须显式指定 `visual_model` 和 `visual_weight` 字段指向 `visual.mnn`，否则视觉编码器加载为空导致 SIGSEGV
-- 线程模式：`modelDispatcher` 单线程串行化（`engineMutex` 保护）
+1. 加载 Bitmap（最长边限制，避免 OOM）
+2. 人脸 ROI 检测 → `Stage1Result`（`hasFace` / `faceCount` / `roiRects`）
+3. 对每张人脸：
+   - 用 106 关键点做仿射对齐 → 112×112 ROI
+   - `FaceClusterEngine.extractFeature()` → 512 维 MobileFaceNet embedding
+   - 写入 `face_embeddings` 表
+4. `MobileClipEngine.encodeImage()` → 512 维语义向量 → Base64
+5. 写入 `media_assets.faceRoiResult` / `semanticEmbedding` / `hasFace`
 
-**利用前序结果构造多层级 Prompt**：
+### 3.2 Pass 2：DBSCAN 全局聚类
 
-```kotlin
-suspend fun stage3(bitmap: Bitmap, stage1Result: Stage1Result, stage2Result: Stage2Result?): String {
-    // 根据是否有人脸构造不同的 system prompt
-    val systemPrompt = buildString {
-        appendLine("你是一个相册照片标签生成助手。")
-        appendLine("请从以下维度用中文描述这张照片，输出格式为JSON：")
-        appendLine("{")
-        appendLine("  \"scene\": \"场景(室内/户外/公园/街道/餐厅/海边/城市等)\",")
-        appendLine("  \"activity\": \"活动(吃饭/旅行/运动/会议/购物/聚会等)\",")
-        appendLine("  \"objects\": [\"物体1\",\"物体2\"],")
-        appendLine("  \"tags\": [\"标签1\",\"标签2\",\"标签3\"],")
-        appendLine("  \"summary\": \"一句话概括\"")
-        appendLine("}")
-        appendLine("")
-        appendLine("【重要规则】")
-        appendLine("1. scene/activity/objects/tags/summary**全部使用中文**")
-        appendLine("2. tags字段生成3-5个中文关键词标签")
-        appendLine("3. 不要输出英文，除非是专有名词如 iPhone、Coca-Cola")
-    }
-    
-    val userPrompt = buildString {
-        if (stage1Result.hasFace) {
-            val count = stage1Result.faceCount
-            append("照片中有${count}张人脸，可能是${if (count >= 3) "合影" else if (count >= 2) "双人照" else "单人照"}。")
-        }
-        append("请分析场景、活动、物体并生成标签。")
-    }
-    
-    return llmEngine.imageInference(
-        bitmap = bitmap,
-        systemPrompt = systemPrompt,
-        userPrompt = userPrompt,
-        maxTokens = 128
-    )
-}
-```
+- 读取所有未分配 `personId` 的 `face_embeddings`
+- 余弦距离 + DBSCAN 参数：`DBSCAN_EPS`、`DBSCAN_MIN_PTS`
+- 生成 `persons` 记录，更新 `face_embeddings.personId` 与 `media_assets.faceId`
+- 对仅含一张照片的人脸直接新建单簇
 
-**JSON 解析后写入 MediaAsset.labels**：
+### 3.3 Pass 3：Qwen 图像理解标签生成
 
-```kotlin
-data class QwenTags(
-    val scene: String = "",
-    val activity: String = "",
-    val objects: List<String> = emptyList(),
-    val tags: List<String> = emptyList(),
-    val summary: String = ""
-)
+**模型**: Qwen 3.5-2B（MNN-LLM 运行时）  
+**输入**: 照片 URI + `faceRoiResult` 人脸上下文  
+**输出**: `QwenTags` → `TagNormalizer` → `UnifiedTagResult` JSON
 
-// 写入 MediaAsset.labels 为 JSON 字符串
-val labelJson = Json.encodeToString(qwenTags)
-```
+**Prompt 约束**:
+- 要求输出 JSON：`scene` / `activity` / `objects` / `tags` / `summary`
+- 所有字段使用中文（专有名词除外）
+- `tags` 3-5 个中文关键词
+
+**OpenCL 守护**:
+- `OpenClGuardian.warmup()` 在 Pass 3 推理前执行
+- 单次推理带超时；连续失败/超时后标记设备降级 CPU，黑名单持久化到 DataStore
+
+### 3.4 Pass 4：MOBILE_CLIP_ENCODING（保留兼容）
+
+- `TagScanPass.MOBILE_CLIP_ENCODING` 保留枚举值
+- 常规扫描已将 MobileCLIP 编码内联合并到 Pass 1，避免重复解码
+- 仅用于：
+  - 兼容历史任务记录
+  - 单独对旧数据补全语义 embedding 的场景
+
+### 3.5 Pass 5：ML Kit 英文标签提取
+
+- `MlKitTagExtractor.extract(uri)` → 英文标签列表
+- 置信度阈值默认 `0.5`，最大数量 `5`
+- 结果写入 `media_assets.mlKitLabels` JSON 数组
 
 ---
 
-## 4. 标签语言策略：统一中文
+## 4. 队列编排与生命周期
 
-### 4.1 现状分析
+### 4.1 TagScanOrchestrator
 
-| 标签来源 | 当前语言 | 说明 |
-|----------|----------|------|
-| ML Kit ImageLabeler（已有） | **英文**（默认） | ML Kit 的 `ImageLabeler` 输出的 `label.text` 为英文，如 `"Outdoor"`、`"Food"` |
-| Qwen3.5-2B（Stage 3 设计） | 原设计为**混用**英文 scene + 中文 tags | prompt 示例给出了英文场景词，但也给了中文标签 |
-| L3 元数据标签 | **中文**（地点名/来源名） | 用户输入 + 系统字段 |
-| 人脸聚类 `person:{name}` | **中文**（用户命名） | 如 `person:张三` |
+负责将一次扫描拆分为可持久化的原子任务，支持：
 
-### 4.2 语言不统一的风险
+- `scheduleAutoScan(policy)` — 自动增量扫描
+- `scheduleRegenerate(mediaIds, categories, mode)` — 对指定媒体重新生成指定类别
+- `scheduleRegenerateByQuery(query, categories, mode)` — 按时间范围查询批量生成
+- `schedulePass(pass, query, mode, policy)` — 执行单个 Pass 阶段
+- `pause()` / `resume()` / `cancel()` — 会话生命周期控制
 
-现有搜索系统 `QueryBuilder` 使用 SQLite `LIKE` 进行标签匹配：
-
-```kotlin
-// QueryBuilder.kt (已有代码)
-tagDao.searchByExactTag(keyword)  // 精确匹配
-tagDao.searchByTagName(keyword)   // LIKE 模糊匹配
-mediaDao.searchByLabel(keyword)   // legacy LIKE 搜索
-```
-
-**问题场景**：
-- 用户搜索 `"公园"` → `LIKE '%公园%'` → 匹配中文 `"公园"`，但不匹配英文 `"park"`
-- 用户搜索 `"户外"` → 不匹配英文 `"outdoor"`
-- 用户搜索 `"吃饭"` → 不匹配英文 `"eating"`
-
-### 4.3 决策：Qwen 输出统一为中文
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Stage 3 Qwen 输出 → 全部中文                           │
-│                                                         │
-│  scene: "户外"         (而非 "outdoor")                  │
-│  activity: "旅行"      (而非 "travelling")               │
-│  tags: ["风景","山"]  (而非 ["landscape","mountain"])   │
-│  summary: "在山顶拍摄的风景照片"                          │
-│                                                         │
-│  ML Kit 标签保持英文（单独索引，与 Qwen 标签不混用）       │
-└─────────────────────────────────────────────────────────┘
-```
-
-**理由**：
-1. **用户搜索习惯**：App 面向中文用户，`"公园"` 比 `"park"` 自然
-2. **SQLite LIKE 精准匹配**：中文关键词精确命中中文标签，无翻译损耗
-3. **ML Kit 英文标签独立路径**：已有标签引擎的英文结果在 `tagDao` 中单独索引，与 Qwen 的 `labels` 字段不冲突
-4. **LLM Agent 桥接**：`MediaSearchEngine` 的第二层走 LLM 语义解析，天然支持中英文跨语言
-
-### 4.4 ML Kit 标签处理策略
-
-已有的 ML Kit `MetadataExtractor` 输出英文标签（如 `"Food"`、`"Plant"`、`"Sky"`），策略如下：
-
-| 处理方式 | 说明 |
-|----------|------|
-| **保留英文原样写入** | ML Kit 标签写入 `MediaEntity.labels` 的 ML Kit 专属字段（已有逻辑） |
-| **不翻译** | 不引入翻译步骤（增加延迟且可能不准确） |
-| **搜索时兼容** | `QueryBuilder` 的 `searchByLabel()` 会同时搜索中英文；用户通过 LLM Agent 搜索时自动转换语言 |
-| **未来可选** | 若误识别率过高，可关闭 ML Kit 标签，完全依赖 Qwen 中文标签 |
-
-### 4.6 受控词表与后处理
-
-> 受控词表是确保标签一致性的核心机制。Qwen 的 prompt 只给示例定格式，**不要求模型严格限定在词表内**。
-> 后处理阶段将模型返回的自由文本匹配到受控词表，同时保留未匹配的原始文本作为补充。
-
-#### 4.6.1 受控词表定义
-
-词表以 JSON 配置文件存储，随业务持续扩展：
-
-```json
-// controlled_vocab.json
-{
-  "scene": ["室内", "户外", "办公室", "公园", "街道", "餐厅", "咖啡厅",
-            "海边", "山脉", "城市", "乡村", "花园", "阳台", "停车场",
-            "河边", "森林", "雪地", "沙漠", "泳池", "体育馆", "教室",
-            "商场", "车内", "屋顶", "海滩"],
-  "activity": ["吃饭", "旅行", "运动", "会议", "购物", "聚会", "散步",
-               "遛狗", "拍照", "自拍", "阅读", "工作", "学习", "开车",
-               "休息", "游泳", "爬山", "骑行", "跑步", "婚礼", "生日",
-               "节日", "遛娃", "唱歌", "跳舞", "露营", "烧烤"],
-  "objects": ["食物", "饮品", "甜点", "咖啡", "茶", "宠物", "猫", "狗",
-               "花", "植物", "书", "手机", "电脑", "车", "婴儿", "蛋糕",
-               "酒", "水果", "蔬菜", "自行车", "乐器"],
-  "atmosphere": ["日出", "日落", "白天", "夜晚", "晴天", "阴天", "雨天",
-                  "雪天", "明亮", "昏暗", "暖色调", "冷色调", "霓虹", "逆光"],
-  "people": ["单人", "双人", "多人", "合影", "全家福", "自拍", "情侣",
-              "亲子", "朋友", "同事"]
-}
-```
-
-#### 4.6.2 标签规范化流程
-
-```
-Qwen 输出 JSON
-    ↓
-┌─────────────────────────────────────────────┐
-│  规范化算法                                   │
-│                                              │
-│  for each field (scene/activity/objects/tags):│
-│    for each raw_value:                        │
-│      ① 精确匹配 → 命中词表 → 直接使用          │
-│      ② 包含匹配 → raw_value 包含词表词 → 使用  │
-│      ③ 语义匹配 → 编辑距离 ≤ 1 → 纠正 → 使用  │
-│      ④ 未匹配 → 保留原始值（标记为 non_std）   │
-│                                              │
-│  输出: QwenTagsNormalized                     │
-└─────────────────────────────────────────────┘
-    ↓
-写入 MediaAsset.labels
-```
-
-**规范化算法实现**：
+### 4.2 任务持久化
 
 ```kotlin
-data class QwenTagsNormalized(
-    val scene: String,                    // 已映射到受控词表
-    val activity: String,                 // 已映射到受控词表
-    val objects: List<String>,            // 每个object尽量映射
-    val tags: List<String>,               // 每个tag尽量映射
-    val summary: String,                  // 原始文本（不做映射）
-    val nonStandard: List<String> = emptyList()  // 未匹配的原始词
-)
-
-class TagNormalizer(private val vocab: ControlledVocab) {
-    
-    fun normalize(raw: QwenTags): QwenTagsNormalized {
-        return QwenTagsNormalized(
-            scene = bestMatch(raw.scene, vocab.scene),
-            activity = bestMatch(raw.activity, vocab.activity),
-            objects = raw.objects.map { bestMatch(it, vocab.objects) },
-            tags = raw.tags.map { bestMatchAcrossCategories(it) },
-            summary = raw.summary,
-            nonStandard = collectNonStandard(raw)
-        )
-    }
-    
-    private fun bestMatch(input: String, candidates: List<String>): String {
-        // 1. 精确匹配
-        if (input in candidates) return input
-        // 2. 包含匹配: "海边沙滩" → 包含 "海边"
-        candidates.firstOrNull { input.contains(it) || it.contains(input) }
-            ?.let { return it }
-        // 3. 编辑距离 ≤ 1 容错
-        candidates.firstOrNull { levenshtein(input, it) <= 1 }
-            ?.let { return it }
-        // 4. 未匹配，保留原始值
-        return input
-    }
-}
-```
-
-#### 4.6.3 为什么不把所有词写在 Prompt 里
-
-| 方案 | 缺点 |
-|------|------|
-| 将所有受控词写在 prompt | ① 场景+活动+物体 ≈ 80 个词，占 ~200 tokens；② 模型会倾向于只输出示例词，忽略未见过的但合理的内容；③ 词表更新需修改提示词，耦合度高 |
-| Prompt 只给格式示例 + 后处理映射 | ① prompt 仅 ~50 tokens；② 模型自由输出 → 后处理映射到标准词；③ 未匹配的词保留原值，不丢失信息；④ 词表更新只需改 JSON 配置 |
-
-#### 4.6.4 搜索时的匹配策略
-
-```
-用户搜索 "爬山"
-    ↓
-LIKE '%爬山%' 搜索 → 命中 scene="山脉", tags=["爬山"] 等
-    ↓
-LLM Agent 搜索 → 同义词扩展 "爬山" → "hiking", "户外", "运动"
-    ↓
-如果 Qwen 输出了 "健行"（受控词表中无此词）
-    → nonStandard=["健行"] 仍然可被 LIKE 搜索命中！
-    → 后续纳入词表后，规范化后可被更多用户匹配到
-```
-
-**关键设计原则**：受控词表是软约束，不是硬限制。未匹配的词保留在 `nonStandard` 中，仍然可搜索。
-
----
-
-## 5. 增量更新策略
-
-### 5.1 新照片触发
-
-```
-用户拍照/导入 → MediaStore ContentObserver 监听到变化
-    ↓
-等待 30s（防频繁触发）
-    ↓
-检查新照片 URI 列表
-    ↓
-单张处理管道（非批处理，体验优先）
-    ↓
-写入标签 → 更新相册 Grid（RecyclerView 局部刷新）
-```
-
-### 5.2 已处理照片重扫
-
-```
-用户触发「重扫全部标签」
-    ↓
-清除 face_embeddings 和 persons 表
-    ↓
-清除所有 MediaAsset.labels
-    ↓
-全量批处理（带进度条展示）
-    ↓
-通知相册刷新
-```
-
----
-
-## 6. 数据模型说明
-
-### 6.1 已有 Room 表（重复使用）
-
-人脸聚类相关的两张表已由项目预定义，无需新增：
-
-```kotlin
-// face_embeddings.kt - 已有（app/.../data/local/entity/）
-@Entity(tableName = "face_embeddings", ...)
-data class FaceEmbeddingEntity(
-    @PrimaryKey(autoGenerate = true)
-    val embeddingId: Long = 0,
+@Entity(tableName = "tag_scan_tasks")
+data class TagScanTaskEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: String,
     val mediaId: Long,
-    val personId: Long? = null,            // 关联到 persons 表
-    val embedding: ByteArray,              // MobileFaceNet 512 维特征向量
-    val createdAt: Long = System.currentTimeMillis()
-)
-
-// persons.kt - 已有
-@Entity(tableName = "persons")
-data class PersonEntity(
-    @PrimaryKey(autoGenerate = true)
-    val personId: Long = 0,
-    val name: String? = null,              // 用户命名
-    val coverMediaId: Long? = null,        // 代表性照片
-    val faceCount: Int = 0,
+    val pass: TagScanPass,                 // FACE_DETECTION / DBSCAN / QWEN_TAGGING / MOBILE_CLIP_ENCODING / ML_KIT_TAGGING
+    val tagCategories: String? = null,     // 目标类别 JSON 数组
+    val status: TagScanTaskStatus = PENDING,
+    val priority: Int = 0,
+    val attemptCount: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val scheduledAt: Long? = null,
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
+    val errorMessage: String? = null
 )
 ```
 
-### 6.2 MediaAsset 扩展
+### 4.3 增量去重策略
 
+- 通过 `media_assets.lastTagScanPasses` JSON 判断已覆盖的 Pass
+- `ScanQueuePolicy.skipRecentlyTaggedMs` 控制避重窗口（默认 24h）
+- `ScanQueuePolicy.order` 支持 `OLDEST_FIRST` / `NEWEST_FIRST`
+- 启动时自动将异常中断的 `RUNNING` 任务重置为 `PENDING`
+
+### 4.4 类别到 Pass 映射
+
+| TagCategory | 映射 Pass |
+|-------------|-----------|
+| `FACE` | `FACE_DETECTION` + `DBSCAN` |
+| `SCENE` / `ACTIVITY` / `OBJECTS` / `TAGS` / `SUMMARY` | `QWEN_TAGGING` |
+| `ML_KIT_LABELS` | `ML_KIT_TAGGING` |
+
+---
+
+## 5. OpenCL 超时与 CPU 降级
+
+```kotlin
+class OpenClGuardian(
+    context: Context,
+    engine: LocalLlmEngine,
+    prefs: UserSettingsRepository
+)
 ```
-// MediaAsset.labels 字段存储完整 JSON:
-{
-  "face": {"count":2, "selfie":false, "personIds":[1, 2]},
-  "scene": "户外",
-  "activity": "旅行",
-  "objects": ["山", "天空"],
-  "tags": ["风景", "旅行", "户外"],
-  "qwen_summary": "在山顶拍摄的风景照片"
-}
-```
+
+- **Warmup**: Pass 3 开始前执行一次短推理，确认 OpenCL 可用
+- **超时**: 单次 Qwen 推理带超时，防止 OpenCL 挂起
+- **降级**: 连续失败/超时后标记设备降级 CPU，黑名单写入 DataStore
+- **恢复**: 用户可在设置中手动重置，或每周自动尝试一次
+- **模型加载**: `TagGenerationScheduler.ensureModelLoaded()` 按 Guardian 策略自动选择 OpenCL / CPU
+
+---
+
+## 6. 数据模型
+
+当前数据库版本：**6**（Room `@Database(version = 6)`）。
+
+核心表与字段详见 `TAG_DATABASE_SCHEMA.md`，本方案涉及的关键字段：
+
+| 字段 | 表 | 说明 |
+|------|-----|------|
+| `labels` | `media_assets` | Qwen 中文标签 JSON |
+| `mlKitLabels` | `media_assets` | ML Kit 英文标签 JSON |
+| `faceRoiResult` | `media_assets` | 人脸 ROI 检测 JSON |
+| `semanticEmbedding` | `media_assets` | MobileCLIP 512 维向量 Base64 |
+| `lastTagScanAt` / `lastTagScanPasses` | `media_assets` | 增量去重 |
+| `face_embeddings.embedding` | `face_embeddings` | MobileFaceNet 512 维 ByteArray |
+| `persons.name` / `faceCount` | `persons` | 人物簇 |
+| `tag_scan_tasks.*` | `tag_scan_tasks` | 扫描任务队列 |
 
 ---
 
 ## 7. 性能预算
 
-| 阶段 | 单张耗时 | 10 张耗时 | 100 张耗时 | 可并行 |
-|------|----------|-----------|------------|--------|
-| Stage 1 ROI | ~30ms | ~300ms | ~3s | ✅ 全并行 |
-| **Stage 1.5 MobileCLIP** | **~50-100ms** | **~0.5-1s** | **~5-10s** | **✅ 全并行** |
-| Stage 2 聚类 | ~50ms | ~500ms | ~5s | ❌ 全局依赖 |
-| Stage 3 Qwen | ~3-5s | ~30-50s | ~5-8min | ❌ 独占调度器 |
-| **总计** | **~3-5s** | **~30-50s** | **~5-8min** | |
+| Pass | 单张耗时 | 可并行 | 备注 |
+|------|----------|--------|------|
+| Pass 1 人脸检测 | ~30-80ms | ✅ | 依赖 FaceDetector 后端 |
+| Pass 1 MobileCLIP | ~50-100ms | ✅ | 已内联合并，无额外解码 |
+| Pass 1 Embedding | ~30-60ms | ✅ | MobileFaceNet 512 维 |
+| Pass 2 DBSCAN | ~5-20ms/对比 | ❌ | 全局依赖 |
+| Pass 3 Qwen | ~2-8s | ❌ | 独占调度器，OpenCL 优先 |
+| Pass 5 ML Kit | ~50-200ms | ✅ | 首次可能触发模型下载 |
 
-> **注**：MobileCLIP 提前至 Pass 1 后执行，总耗时不变，但语义搜索能力在 Pass 1.5 后即可用（而非等全部 Pass 3 完成）。
-
-### 7.1 用户体感优化
-
-- **首次全量扫描**：后台静默执行，不阻塞 UI
-- **进度反馈**：相册页显示「正在扫描 X/100 张照片」轻提示
-- **新照片**：单张处理，延时 < 5s
-- **中断恢复**：记录已处理的 `MediaAsset.id`，中断后从断点续传
+**优化措施**:
+- 每处理 `BATCH_SIZE=10` 张强制冷却 `BATCH_COOLDOWN_MS=15s`
+- 增量扫描单次上限 `INCREMENTAL_MAX_PHOTOS=50`
+- Pass 3 串行执行，避免多实例 GPU 冲突
 
 ---
 
-## 8. 风险与 mitigation
+## 8. 与搜索集成
+
+Tag 生成是 `MediaSearchEngine` 的底层索引层：
+
+- **显式召回**：`ExplicitFirstSearchPipeline` 读取 `labels`、`mlKitLabels`、`faceRoiResult`、`captureDate`、`locationName`、`ocrText` 等字段构造 SQLite 查询
+- **语义召回**：`SemanticSearchEngine` 读取 `semanticEmbedding` 做余弦相似度匹配
+- **融合排序**：`MediaSearchEngine.mergeAndRank()` 将显式结果与语义结果融合，显式命中优先
+
+完整搜索链路见 `GALLERY_SEARCH.md`。
+
+---
+
+## 9. 风险与 Mitigation
 
 | 风险 | 影响 | Mitigation |
 |------|------|------------|
-| Qwen 推理耗时过长 | 全量扫描 > 10min | 批处理 + 可中断 + 进度展示 |
-| 人脸聚类误判 | 相同人物归入不同簇 | 支持用户手动合并簇（UI 操作） |
-| 模型加载冲突 | 人脸检测 + LLM 同时加载 OOM | ResourceManager 引用计数 + 卸载策略 |
-| 标签质量不可靠 | 小模型 Qwen 3.5-2B 能力有限 | ①只生成场景级粗粒度标签 ②可编辑标签 |
-| 电量消耗 | 全量扫描费电 | 仅 Wi-Fi + 充电时自动触发 |
-
----
-
-## 9. 后续迭代方向
-
-| 阶段 | 功能 | 依赖 |
-|------|------|------|
-| **Phase 1** | 基础 ROI + 单人/多人标签 | 已有 FaceDetector |
-| **Phase 2** | 人脸聚类 + faceId 分组（MobileFaceNet 512 维 embedding） | MobileFaceNet 模型接入 + MNN 推理 |
-| **Phase 3** | Qwen 内容标签 | 已有 LocalLlmEngine |
-| **Phase 4** | 标签搜索 + 智能相册分组 | 上述全部 + UI |
-| **Phase 5** | 用户命名人脸簇 + 合并/拆分 | UI + 数据迁移 |
+| Qwen 推理耗时过长 | 全量扫描慢 | 后台 Service + 可暂停/取消 + 批次冷却 |
+| OpenCL 兼容性问题 | 部分设备挂起 | `OpenClGuardian` warmup + 超时降级 CPU + DataStore 黑名单 |
+| 人脸聚类误判 | 同一人分成多簇 | 支持用户手动合并/重命名；DBSCAN 参数调优 |
+| 标签质量不可靠 | 搜索召回差 | 受控词表规范化 + 只生成场景级粗粒度标签 + 用户可触发重生成 |
+| 电量消耗 | 后台扫描费电 | 仅充电+Wi-Fi 时自动全量扫描；运行时电池/热状态守卫 |
+| ML Kit 英文标签与中文 Query 语言不一致 | 中文搜不到英文标签 | `QuerySegmenter` / LLM 语义解析层负责跨语言桥接；不存储翻译 |
 
 ---
 
 ## 10. 关键接口定义
 
-### 10.1 TagGenerationScheduler
+### 10.1 TagGenerationScheduler（简化）
 
 ```kotlin
-interface TagGenerationScheduler {
-    /** 触发全量扫描 */
-    suspend fun scanAll(progressCallback: (processed: Int, total: Int) -> Unit)
-    
-    /** 处理单张新照片 */
-    suspend fun processSingle(asset: MediaAsset)
-    
-    /** 取消进行中的扫描 */
-    fun cancel()
-    
-    /** 获取扫描状态 */
+class TagGenerationScheduler(
+    context: Context,
+    dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    guard: suspend () -> GuardResult = { GuardResult.ALLOW }
+) {
     val isScanning: StateFlow<Boolean>
-    val progress: StateFlow<ScanProgress?>
-}
+    val progress: StateFlow<TagScanProgress?>
+    val lastScanMessage: StateFlow<String?>
 
-data class ScanProgress(
-    val processed: Int,
-    val total: Int,
-    val currentStage: Stage = Stage.FACE_ROI
-)
+    suspend fun processSingle(uri: String, mediaId: Long)
+    suspend fun ensureModelLoaded(): Boolean
 
-enum class Stage {
-    FACE_ROI,
-    FACE_CLUSTER,
-    QWEN_TAGGING,
-    MOBILE_CLIP,      // 语义编码阶段（已提前至 Pass 1 后执行，保留枚举值兼容）
-    COMPLETE
+    enum class GuardResult { ALLOW, PAUSE, ABORT }
 }
 ```
 
-### 10.2 FaceClusterEngine
+> 旧版 `scanAll()` / `scanIncremental()` / `scanPass1/2/3()` 已标记 `@Deprecated`，请使用 `TagScanOrchestrator` 替代。
+
+### 10.2 TagScanOrchestrator（简化）
 
 ```kotlin
-interface FaceClusterEngine {
-    /** 提取人脸特征向量（MobileFaceNet: 112×112 ROI → 512 维） */
-    suspend fun extractFeature(bitmap: Bitmap, roi: RectF, landmarks106: FloatArray): FloatArray
-    
-    /** 匹配已有簇（512 维特征 → 余弦距离 → personId） */
-    suspend fun matchCluster(feature: FloatArray): Long?  // personId, null=新建簇
-    
-    /** 创建新簇 */
-    suspend fun createCluster(feature: FloatArray, mediaId: Long): Long
-    
-    /** 合并两个簇 */
-    suspend fun mergeClusters(personA: Long, personB: Long)
-    
-    /** 获取簇内代表照片 */
-    suspend fun getClusterPhotos(personId: Long): List<MediaAsset>
+class TagScanOrchestrator(
+    context: Context,
+    scheduler: TagGenerationScheduler
+) {
+    val progress: StateFlow<TagScanSessionProgress?>
+
+    suspend fun scheduleAutoScan(policy: ScanQueuePolicy = ScanQueuePolicy()): String
+    suspend fun scheduleRegenerate(mediaIds, categories, mode, policy): String
+    suspend fun scheduleRegenerateByQuery(query, categories, mode): String
+    suspend fun schedulePass(pass, query, mode, policy): String
+    fun pause()
+    fun resume()
+    fun cancel()
 }
 ```
 
 ---
 
-## 11. 与现有架构的集成
+## 11. 后续迭代方向
 
-### 11.1 Agent 集成
-
-标签系统作为 **Capability** 暴露给 Agent：
-
-```kotlin
-class AutoTagCapability(
-    private val tagScheduler: TagGenerationScheduler
-) : Capability {
-    override val name = "auto_tag"
-    
-    @Tool("Scan all photos and generate tags")
-    fun scanAll() { ... }
-    
-    @Tool("Get tags for a specific photo")
-    fun getTags(photoId: Long): TagsResult { ... }
-    
-    @Tool("Get face clusters (person groups)")
-    fun getPersonList(): List<PersonGroup> { ... }
-}
-```
-
-### 11.2 搜索集成
-
-标签写入 `labels` 字段后，Agent 搜索可直接利用：
-
-```
-用户: "帮我找到上周在公园拍的合照"
-Agent SQL: SELECT * FROM media_assets 
-           WHERE labels LIKE '%park%' 
-           AND labels LIKE '%group%' 
-           AND captureDate BETWEEN ? AND ?
-```
+| 方向 | 说明 |
+|------|------|
+| 标签质量提升 | 优化 Qwen Prompt、扩充 `ControlledVocab`、引入用户反馈修正 |
+| 人物簇管理 | UI 支持合并、拆分、忽略误检簇 |
+| ML Kit 跨语言 | 完善英文标签 → 中文的翻译映射或语义桥接 |
+| 语义召回增强 | 尝试更大 MobileCLIP 变体或端侧多模态模型 |
+| 自动化测试 | 增加端到端 Tag 生成回归测试与性能基线 |
 
 ---
 
 > **维护者**：RD Agent  
 > **状态**：已实施  
-> **最后更新**：2026-06-27（MobileCLIP 语义编码提前至 Pass 1 后执行）
+> **最后更新**：2026-06-30

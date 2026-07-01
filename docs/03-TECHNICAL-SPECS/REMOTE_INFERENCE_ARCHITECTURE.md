@@ -532,14 +532,14 @@ class AiAgentUseCase(
 - [AGENTS.md](../../AGENTS.md) - Agent First 架构原则
 - [FEATURES.md](../01-PRODUCT/FEATURES.md) - 产品功能定义
 - [IM_REMOTE_CONTROL_TECH_SPEC.md](IM_REMOTE_CONTROL_TECH_SPEC.md) - IM 远程控制技术规格
-- [MNN_LLM_ANDROID.md](MNN_LLM_ANDROID.md) - 本地 LLM 接入规范
+- [MNN_LLM_PERFORMANCE_OPTIMIZATION.md](MNN_LLM_PERFORMANCE_OPTIMIZATION.md) - 本地 LLM 性能优化
 
 ### B. 相关代码
 - [AiAgentUseCase.kt](../../app/src/main/java/com/mamba/picme/domain/usecase/AiAgentUseCase.kt)
-- [AgentOrchestrator.kt](../../app/src/main/java/com/mamba/picme/domain/agent/AgentOrchestrator.kt)
-- [RemoteInferencePipeline.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/RemoteInferencePipeline.kt)
-- [RemoteOrchestrator.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/RemoteOrchestrator.kt)
+- [AgentOrchestrator.kt](../../runtime-core/src/main/java/com/mamba/picme/agent/core/facade/AgentOrchestrator.kt)
+- [RemoteReActAgent.kt](../../runtime-core/src/main/java/com/mamba/picme/agent/core/inference/remote/react/RemoteReActAgent.kt)
+- [RemoteCommandDispatcher.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/RemoteCommandDispatcher.kt)
 - [OpenAiChatModel.java](../../agent-core/src/main/java/com/mamba/model/openai/OpenAiChatModel.java) — :agent-core OpenAI 兼容聊天模型
 - [AiServices.java](../../agent-core/src/main/java/com/mamba/service/AiServices.java) — :agent-core AI 服务代理构建器
-- [ToolCallCommandParser.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/ToolCallCommandParser.kt)
-- [RemotePromptBuilder.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/RemotePromptBuilder.kt)
+- [ToolCallCommandParser.kt](../../runtime-core/src/main/java/com/mamba/picme/agent/core/inference/remote/parser/ToolCallCommandParser.kt)
+- [RemotePromptBuilder.kt](../../runtime-core/src/main/java/com/mamba/picme/agent/core/inference/remote/prompt/RemotePromptBuilder.kt)

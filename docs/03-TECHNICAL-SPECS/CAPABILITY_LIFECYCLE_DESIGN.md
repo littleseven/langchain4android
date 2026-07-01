@@ -424,6 +424,6 @@ class CapabilityRegistry {
 
 ## 8. 参考
 
-- [AGENTS.md](/Users/guoshuai/AndroidStudioProjects/PicMe/AGENTS.md) - Agent First 架构原则
-- [CAPABILITY_REGISTRY.md](/Users/guoshuai/AndroidStudioProjects/PicMe/docs/04-AGENT-CAPABILITIES/CAPABILITY_REGISTRY.md) - Capability Registry 文档
+- [AGENTS.md](../../AGENTS.md) - Agent First 架构原则
+- [CAPABILITY_REGISTRY.md](../04-AGENT-CAPABILITIES/CAPABILITY_REGISTRY.md) - Capability Registry 文档
 - [Compose 生命周期](https://developer.android.com/jetpack/compose/lifecycle) - 官方文档

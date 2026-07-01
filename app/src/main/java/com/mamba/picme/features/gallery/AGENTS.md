@@ -4,9 +4,15 @@
 > - 本文档仅承载本模块的实现细节（架构、代码约束、检查清单）。
 > - 产品目标与验收口径以 `PRODUCT.md` 为准；交互流程与体验规则以 `docs/01-PRODUCT/FEATURES.md` 为准。
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 `AGENTS.md` 为准。
+> - 相册自然语言搜索的完整链路以 `docs/03-TECHNICAL-SPECS/GALLERY_SEARCH.md` 为唯一事实来源（SSOT）。
 > - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
-**模块定位**: 应用默认首页，提供智能聚类相册浏览、媒体查看器、批量操作功能；右下角 plus 菜单聚合 Chat / Camera / Settings / Model Center 四个二级页入口，语音 Agent 面板提供自然语言交互入口。重复照片管理入口已迁移至设置页「相册功能」卡片
+> **版本**: 1.1  
+> **状态**: 生效中  
+> **最后更新**: 2026-06-30  
+> **维护者**: RD Agent
+
+**模块定位**: 应用默认首页，提供智能聚类相册浏览、媒体查看器、批量操作功能；支持端侧自然语言搜索；右下角 plus 菜单聚合 Chat / Camera / Settings / Model Center 四个二级页入口，语音 Agent 面板提供自然语言交互入口。重复照片管理入口已迁移至设置页「相册功能」卡片。
 
 **主要维护者**: [RD] 全栈工程师
 
@@ -16,6 +22,7 @@
 
 - **[PERF] 高刷流畅滚动**: 1000+ 张照片滑动保持 60fps，缩略图加载跟手无白屏
 - **[LOCAL] 纯本地聚类**: 人脸分组、重复检测全部在设备端完成，严禁上传云端
+- **[SEARCH] 自然语言搜索**: 纯本地推理，结构化召回优先，语义召回补充，无需联网
 - **[I18N] 多语言支持**: 分组标题、操作按钮必须提取到 strings.xml
 - **[FEEDBACK] 流体动效**: 图片展开/收起跟随手指轨迹，缩放平移过渡自然
 - **[MEMORY] 内存优化**: LruCache 限制上限，OOM 时自动降级清晰度
@@ -86,17 +93,18 @@ HorizontalPager(
 - **进入方式**: 长按任意缩略图进入选择模式
 - **连续批选**: 支持拖拽滑动批量选择/取消，减少逐张点击成本
 - **数据结构**: 使用 `mutableStateListOf<Long>` 存储选中 ID
-- **全选功能**: 提供"全选"按钮快速选中当前视图所有媒体
+- **全选功能**: 提供"全选"按钮快速选中当前视图所有媒体；搜索模式下仅全选搜索结果
 - **批量分享**:
   - 单张: `Intent.ACTION_SEND` + `EXTRA_STREAM`
   - 多张: `Intent.ACTION_SEND_MULTIPLE` + `EXTRA_STREAM` ArrayList
   - MIME 类型: 图片用 `image/*`，视频用 `video/*`，混合用 `*/*`
-- **批量删除**: 调用 `viewModel.deleteMediaByIds(ids)` 异步删除
+- **批量删除**: 调用 `viewModel.deleteMediaByIds(ids)` 异步删除；搜索结果与主网格共用同一套删除与授权逻辑
 - **Scoped Storage 权限处理**:
   - **Android 6~9 (API 23-28)**: 运行时申请 `READ_EXTERNAL_STORAGE` + `WRITE_EXTERNAL_STORAGE`，通过 `ContentResolver.delete()` 直接删除
   - **Android 10 (API 29)**: 捕获 `RecoverableSecurityException`，保存 `userAction.actionIntent.intentSender`，通过 `StartIntentSenderForResult` 请求单条授权，授权后重试删除
   - **Android 11+ (API 30+)**: 收集失败的 URI 列表，使用 `MediaStore.createDeleteRequest()` 发起批量系统授权对话框，用户允许后系统自动完成物理删除
 - **数据一致性**: 必须遵循"先物理文件、后数据库记录"的顺序。若删除需要用户授权，必须推迟 Room 数据库清理，直到授权成功后再执行，避免用户拒绝后出现"文件还在、记录已消失"的不一致状态
+- **搜索模式一致性**: `GalleryScreen` 订阅 `viewModel.allMedia`，媒体库变更（如删除完成）后自动重新执行当前搜索词并刷新结果网格
 
 **代码示例**:
 ```kotlin
@@ -158,7 +166,55 @@ fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
 }
 ```
 
-### 2.5 首页导航与底部悬浮 Tab（2026-06 新增）
+### 2.5 自然语言搜索 (Natural Language Search)
+
+> 完整实现链路、性能预算与源文件索引见 `docs/03-TECHNICAL-SPECS/GALLERY_SEARCH.md`。
+
+**入口**: `GalleryTopBar` 搜索按钮 → `SearchTopBar` 输入框，搜索结果显示在 `GalleryScreen` 结果网格。
+
+**技术规范**:
+- **本地优先**: 所有查询在设备端完成，禁止上传用户照片或原始 query 到云端
+- **搜索触发**: 输入框文本变化后无额外 debounce（由用户输入事件天然节流）；`GalleryScreen` 使用 `rememberCoroutineScope` 直接调用搜索引擎
+- **搜索引擎**: `GalleryCapability.searchEngine`（`MediaSearchEngine`）由 `AppContainer` 注入，搜索失败时回退为空结果
+- **召回链路**:
+  1. `QuerySegmenter` 对中文 query 按语义/时间/实体分段
+  2. `ExplicitFirstSearchPipeline` 优先执行结构化 SQL 召回（时间、地点、人脸、OCR、TAG 等显式维度）
+  3. `SemanticSearchEngine`（MobileCLIP）在显式召回不足时补充语义召回
+  4. `MediaSearchEngine.mergeAndRank()` 融合排序，结构化结果优先
+- **结果展示**: 搜索命中结果包装为 `GroupedMedia(titleType = SEARCH)`，使用与主网格相同的 `MediaGrid` 组件，支持长按进入批量选择
+- **结果刷新**: `GalleryScreen` 通过 `snapshotFlow { allMedia }.debounce(300)` 监听媒体库变化，搜索激活时自动重新执行当前 query
+- **缩略图安全**: 搜索结果缩略图禁用 Coil crossfade，避免 `Canvas: trying to use a recycled bitmap` 崩溃
+
+**代码示例**:
+```kotlin
+// GalleryScreen.kt
+var searchQuery by remember { mutableStateOf("") }
+var isSearchActive by remember { mutableStateOf(false) }
+var searchResultMedia by remember { mutableStateOf<List<MediaAsset>>(emptyList()) }
+val searchEngine = remember { GalleryCapability.getInstance().searchEngine }
+
+SearchTopBar(
+    searchQuery = searchQuery,
+    onQueryChange = { query ->
+        searchQuery = query
+        if (query.isNotBlank() && searchEngine != null) {
+            searchScope.launch {
+                searchResultMedia = searchEngine.search(query).media
+            }
+        } else {
+            searchResultMedia = emptyList()
+        }
+    },
+    onClose = {
+        searchQuery = ""
+        searchResultMedia = emptyList()
+        isSearchActive = false
+    },
+    resultCount = if (searchQuery.isNotBlank()) searchResultMedia.size else null
+)
+```
+
+### 2.6 首页导航与底部悬浮 Tab
 
 **首页定位**:
 - `GalleryScreen` 是 `MainActivity` NavHost 的 `startDestination`
@@ -184,7 +240,7 @@ fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
 - 使用 `GalleryAgentPanel` + `AgentChatPanel` 公共组件
 - 负责自然语言相册浏览/编辑/管理指令
 
-### 2.6 静态图美颜编辑（2026-05 新增）
+### 2.7 静态图美颜编辑（2026-05 新增）
 
 **技术规范**:
 - **入口**: 
@@ -232,7 +288,7 @@ fun processPhoto(bitmap: Bitmap, settings: BeautySettings, lensFacing: Int = 1) 
 }
 ```
 
-### 2.6 OCR 文字识别集成
+### 2.8 OCR 文字识别集成
 
 **技术规范**:
 - **触发入口**: 
@@ -267,15 +323,24 @@ override fun onCleared() {
 }
 ```
 
-### 2.7 TAG 生成精细控制（2026-06 新增）
+### 2.9 TAG 生成精细控制（2026-06 新增）
 
 **入口**: `TagGenerationControlScreen`（设置 → AI Agent → TAG 生成控制）
 
 **技术规范**:
-- **3-Pass 混合管道**: Pass 1 人脸检测/Embedding → Pass 2 DBSCAN 聚类 → Pass 3 Qwen 多模态标签
+- **5-Pass 混合管道**:
+  - **Pass 1**: `FACE_DETECTION` — 人脸检测 + 人脸 Embedding + MobileCLIP 语义编码（语义编码已内联合并到本阶段）
+  - **Pass 2**: `DBSCAN` — 全局人脸聚类
+  - **Pass 3**: `QWEN_TAGGING` — Qwen 多模态标签生成（场景/活动/物体/标签/摘要）
+  - **Pass 4**: `MOBILE_CLIP_ENCODING` — 保留用于历史任务兼容及单独重编码场景
+  - **Pass 5**: `ML_KIT_TAGGING` — ML Kit Image Labeler 快速英文标签提取
+- **类别到 Pass 映射**（`TagCategory.toPasses`）:
+  - `FACE` → `FACE_DETECTION` + `DBSCAN`
+  - `ML_KIT_LABELS` → `ML_KIT_TAGGING`
+  - `SCENE / ACTIVITY / OBJECTS / TAGS / SUMMARY` → `QWEN_TAGGING`
 - **队列编排**: `TagScanOrchestrator` 持久化任务队列，支持暂停/恢复/取消/失败重试
 - **增量去重**: 默认跳过近期已覆盖所有请求 Pass 的媒体，按 `oldest-first` 排序避免老照片饿死
-- **精细控制**: 支持按 `TagCategory`（人脸/场景/活动/物体/标签/摘要）和时间范围（全部/7天/30天/90天）重新生成
+- **精细控制**: 支持按 `TagCategory`（人脸/场景/活动/物体/标签/摘要/ML Kit 标签）和时间范围（全部/7天/30天/90天）重新生成
 - **OpenCL 守护**: `OpenClGuardian` 在 Pass 3 前 warmup，超时后自动降级 CPU 并记录设备黑名单
 - **模型加载**: `TagGenerationScheduler.ensureModelLoaded()` 优先 OpenCL（用户开启且未降级），失败/warmup 超时后降级 CPU
 - **状态观察**: 通过 `TagGenerationService.sessionProgress` StateFlow 显示进度、预计剩余时间、暂停/恢复按钮
@@ -293,7 +358,7 @@ context.startForegroundService(
 )
 ```
 
-### 2.8 缩略图缓存策略 (LruCache)
+### 2.10 缩略图缓存策略 (LruCache)
 
 **技术规范**:
 - **内存缓存**: 使用 Coil 的 `MemoryCache`，占可用内存 25%
@@ -301,6 +366,7 @@ context.startForegroundService(
 - **加载优先级**: 当前可见项优先加载，预加载相邻项
 - **OOM 保护**: 系统内存紧张时自动降低非可见图片质量
 - **位置记录**: 使用 `mutableStateMapOf<Long, Rect>` 记录缩略图位置，支持展开动画
+- **回收位图保护**: 搜索结果缩略图禁用 Coil crossfade，避免列表滚动时复用已回收 Bitmap 导致崩溃
 
 ## 3. adb 自动化测试命令 (Gallery Test Commands)
 
@@ -368,13 +434,14 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action cancel_tag_sc
 ## 4. Agent 执行规约 (Execution Rules)
 
 - **图片加载**: 必须使用 Coil 框架，配置内存与磁盘缓存策略
-- **线程管理**: 分组计算、OCR 识别必须在后台线程执行
+- **线程管理**: 分组计算、OCR 识别、搜索执行必须在后台线程执行
 - **手势冲突**: 放大态必须禁用 HorizontalPager 翻页 (`userScrollEnabled = false`)
 - **资源释放**: OCR Detector、Bitmap 使用后必须调用 `close()` / `recycle()`
-- **I18N**: 所有分组标题、操作按钮文案必须提取到 strings.xml
-- **日志规范**: 关键操作（分组切换、删除、OCR）需记录 `PicMe:Gallery` 日志
+- **I18N**: 所有分组标题、操作按钮、搜索空态文案必须提取到 strings.xml
+- **日志规范**: 关键操作（分组切换、删除、OCR、搜索）需记录 `PicMe:Gallery` 日志
 - **权限处理**: 读取相册需申请 `READ_MEDIA_IMAGES` / `READ_EXTERNAL_STORAGE` 权限
 - **状态持久化**: 分组模式切换后无需持久化，应用重启恢复默认 `NONE`
+- **搜索注入**: `GalleryCapability.searchEngine` 必须由 `AppContainer` 在应用启动时注入，禁止直接 `new MediaSearchEngine(...)`
 
 ## 5. 常见陷阱检查清单 (Checklist)
 
@@ -390,9 +457,12 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action cancel_tag_sc
 - [ ] 重复扫描是否在后台线程执行？(避免阻塞 UI)
 - [ ] TAG 扫描任务是否正确持久化到 `tag_scan_tasks` 表？(异常恢复)
 - [ ] Pass 3 Qwen 推理是否经过 `OpenClGuardian` 超时保护？(防止 OpenCL 挂起)
-- [ ] 按类别重新生成时是否正确映射到 Pass 阶段？(人脸→Pass 1+2，其他→Pass 3)
+- [ ] 按类别重新生成时是否正确映射到 Pass 阶段？(人脸→Pass 1+2，ML Kit 标签→Pass 5，其他→Pass 3)
 - [ ] 沉浸式模式是否在 DisposableEffect 中正确清理？(onDispose 恢复系统栏)
 - [ ] 缩略图位置记录是否在重组时丢失？(使用 remember)
+- [ ] 搜索结果缩略图是否禁用 Coil crossfade？(避免 recycled bitmap 崩溃)
+- [ ] 搜索模式下删除/授权后是否重新执行当前 query？(观察 `allMedia` 变化)
+- [ ] 搜索空态、结果数量文案是否已提取到 strings.xml？(I18N)
 
 ## 6. 与产品文档对照 (Product Alignment)
 
@@ -400,9 +470,10 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action cancel_tag_sc
 - ✅ 高刷流畅滚动 → LazyVerticalGrid + Coil 缓存 + beyondBoundsPageCount
 - ✅ 智能聚类 → GetGroupedMediaUseCase 支持 6 种分组模式
 - ✅ 流体动效 → HorizontalPager + ZoomableImage 手势联动
-- ✅ 批量操作 → mutableStateListOf 支持连续批选与全选
+- ✅ 批量操作 → mutableStateListOf 支持连续批选与全选；搜索结果支持相同操作
 - ✅ OCR 本地识别 → ML Kit 离线引擎，ViewModel 生命周期管理
-- ✅ TAG 生成控制 → 3-Pass 队列 + 类别/时间范围精细控制 + OpenCL 超时降级
+- ✅ TAG 生成控制 → 5-Pass 队列 + 类别/时间范围精细控制 + OpenCL 超时降级
+- ✅ 自然语言搜索 → `MediaSearchEngine` + `SemanticSearchEngine` 本地召回；结果网格支持长按批量选择
 
 **技术决策记录**:
 - 选择 HorizontalPager 而非 ViewPager2：与 Compose 生态无缝集成，手势控制更灵活
@@ -412,3 +483,5 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action cancel_tag_sc
 - OCR 资源在 onCleared 释放：避免内存泄漏，符合 ViewModel 生命周期规范
 - TAG 扫描使用持久化队列：支持暂停/恢复/取消，避免后台被系统回收后丢失进度
 - OpenCL 推理由 `OpenClGuardian` 守护：warmup + 连续失败降级 CPU，降低设备兼容性风险
+- 搜索结果缩略图禁用 Coil crossfade：规避 LazyVerticalGrid 复用 item 时 Bitmap 已回收导致的崩溃
+- 搜索模式下订阅 `allMedia` 变化：删除/授权完成后自动刷新搜索结果，保证数据一致性

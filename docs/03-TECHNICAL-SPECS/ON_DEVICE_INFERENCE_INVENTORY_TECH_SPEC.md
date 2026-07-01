@@ -320,9 +320,9 @@ PicMe（觅影相册）当前在端侧同时运行 **7 套推理框架**、**14+
 - `docs/03-TECHNICAL-SPECS/MNN_LLM_MULTI_INSTANCE_RESEARCH.md` — LLM 单例与加载点
 - `docs/03-TECHNICAL-SPECS/MNN_RESOURCE_MANAGER_DESIGN.md` — MNN 资源管理
 - `docs/03-TECHNICAL-SPECS/MNN_MULTI_MODEL_LOAD_UNLOAD_CHECKLIST.md` — 多模型生命周期改造
-- `docs/03-TECHNICAL-SPECS/AUTO_TAG_GENERATION_SPEC.md` — TAG 生成 4-Pass 管道
+- `docs/03-TECHNICAL-SPECS/AUTO_TAG_GENERATION_SPEC.md` — TAG 生成 5-Pass 管道
 - `docs/03-TECHNICAL-SPECS/TAG_GENERATION_PERFORMANCE_ANALYSIS.md` — TAG 性能瓶颈分析
-- `docs/03-TECHNICAL-SPECS/MOBILECLIP_SEMANTIC_SEARCH_SPEC.md` — MobileCLIP 语义搜索
+- `docs/03-TECHNICAL-SPECS/GALLERY_SEARCH.md` — 相册自然语言搜索（含 MobileCLIP 语义召回）
 - `docs/03-TECHNICAL-SPECS/KWS_MIGRATION_TECH_SPEC.md` — KWS 唤醒词迁移
 - `docs/06-QA/perf_trace_2026-06-06_ncnn_llm_comparison.md` — LLM 开启前后性能对比
 - `docs/06-QA/perf_trace_2026-06-06_ncnn_highperf.md` — NCNN 人脸检测性能基线
