@@ -1,6 +1,6 @@
 # langchain4android Claude Code Commands 索引
 
-> 从 `.qoder/skills/` 迁移至 `.claude/commands/`，在 Claude Code 中通过 `/command-name` 调用。
+> Claude Code 命令索引。所有命令定义在 `.claude/commands/*.md`，对话中通过 `/command-name` 调用。历史命令曾从 `.qoder/skills/` 迁移而来，当前以 `.claude/commands/` 为唯一事实来源。
 
 ## 可用 Commands（共 25 个）
 
@@ -70,7 +70,8 @@
 
 ---
 
+> 命令源文件：`.claude/commands/*.md`
+> 历史源文件：`.qoder/skills/*/SKILL.md`（已迁移，不再维护）
 > 同步脚本：`.claude/migrate.py`（`.qoder/skills/` → `.claude/commands/`）
 > 修复脚本：`.claude/fix_skills.py`（修复过期引用、路径、模板）
-> 源文件：`.qoder/skills/*/SKILL.md`
-> 最近整理：2026-06-25（修复 19 个文件：过期 TEMPLATE 引用、com/picme 路径、废弃标记）
+> 最近整理：2026-06-30（刷新命令来源说明，确认 25 个命令与 `.claude/commands/` 一一对应）

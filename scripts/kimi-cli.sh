@@ -5,7 +5,7 @@
 #
 
 # 项目路径
-PICME_PATH="$HOME/AndroidStudioProjects/PicMe"
+PICME_PATH="$HOME/AndroidStudioProjects/langchain4android"
 
 cd "$PICME_PATH" || exit 1
 
@@ -37,7 +37,7 @@ kclean() {
 # 安装调试 APK 到设备
 kinstall() {
     echo "📱 安装调试 APK..."
-    adb install -r app/build/outputs/apk/debug/picme-debug.apk
+    adb install -r app/build/outputs/apk/debug/app-debug.apk
 }
 
 # 查看日志
