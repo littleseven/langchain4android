@@ -28,6 +28,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -114,6 +115,7 @@ fun GalleryScreen(
     // 搜索状态
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
+    var isSearchLoading by remember { mutableStateOf(false) }
     var searchResultMedia by remember { mutableStateOf<List<com.mamba.picme.agent.core.model.context.MediaAsset>>(emptyList()) }
     val searchEngine = remember { GalleryCapability.getInstance().searchEngine }
     val searchScope = rememberCoroutineScope()
@@ -126,13 +128,25 @@ fun GalleryScreen(
             .collect {
                 if (isSearchActive && searchQuery.isNotBlank() && searchEngine != null) {
                     Logger.d(TAG, "Media library changed, refreshing search results")
+                    isSearchLoading = true
                     searchResultMedia = searchEngine.search(searchQuery).media
+                    isSearchLoading = false
                 }
             }
     }
 
     val allFlatMedia by remember { derivedStateOf { groupedMedia.flatMap { group -> group.items } } }
     val mediaById = remember(allFlatMedia) { allFlatMedia.associateBy { it.id } }
+    // 预览媒体列表：搜索状态下仅显示搜索结果，非搜索显示全量列表
+    val previewMediaList by remember {
+        derivedStateOf {
+            if (isSearchActive && searchQuery.isNotBlank() && searchResultMedia.isNotEmpty()) {
+                searchResultMedia
+            } else {
+                allFlatMedia
+            }
+        }
+    }
     val context = LocalContext.current
     val app = context.applicationContext as com.mamba.picme.PicMeApplication
     val thumbnailCache = remember { app.container.thumbnailCache }
@@ -404,19 +418,23 @@ fun GalleryScreen(
                         onQueryChange = { query ->
                             searchQuery = query
                             if (query.isNotBlank()) {
+                                isSearchLoading = true
                                 searchScope.launch {
                                     val engine = searchEngine ?: return@launch
                                     val result = engine.search(query)
                                     searchResultMedia = result.media
+                                    isSearchLoading = false
                                 }
                             } else {
                                 searchResultMedia = emptyList()
+                                isSearchLoading = false
                             }
                         },
                         onClose = {
                             searchQuery = ""
                             searchResultMedia = emptyList()
                             isSearchActive = false
+                            isSearchLoading = false
                         },
                         resultCount = if (searchQuery.isNotBlank()) searchResultMedia.size else null
                     )
@@ -490,7 +508,16 @@ fun GalleryScreen(
 
             when {
                 isSearchActive && searchQuery.isNotBlank() -> {
-                    if (searchResultMedia.isEmpty()) {
+                    if (isSearchLoading && searchResultMedia.isEmpty()) {
+                        // 首次搜索加载中，不显示空结果提示以避免闪烁
+                        // 已有结果时不显示 loading，保持现有结果展示
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (searchResultMedia.isEmpty()) {
                         EmptyGalleryMessage(message = "未找到匹配 \"$searchQuery\" 的照片")
                     } else {
                         val searchGroup = com.mamba.picme.domain.model.GroupedMedia(
@@ -515,12 +542,12 @@ fun GalleryScreen(
                                         selectedIds.add(asset.id)
                                     }
                                 } else {
-                                    // 搜索结果点击：先按 ID 查找索引
-                                    var index = allFlatMedia.indexOfFirst { it.id == asset.id }
+                                    // 搜索结果点击：在搜索结果列表中查找索引
+                                    var index = searchResultMedia.indexOfFirst { it.id == asset.id }
                                     // ID 未匹配时按 URI 兜底查找
                                     if (index < 0) {
-                                        Logger.w(TAG, "Search result id='${asset.id}' not in allFlatMedia, fallback to URI")
-                                        index = allFlatMedia.indexOfFirst { it.uri == asset.uri }
+                                        Logger.w(TAG, "Search result id='${asset.id}' not in searchResultMedia, fallback to URI")
+                                        index = searchResultMedia.indexOfFirst { it.uri == asset.uri }
                                     }
                                     if (index >= 0) {
                                         selectedMediaIndex = index
@@ -650,7 +677,7 @@ fun GalleryScreen(
                 }
             }
 
-            val activeMedia = selectedMediaIndex?.let { allFlatMedia.getOrNull(it) }
+            val activeMedia = selectedMediaIndex?.let { previewMediaList.getOrNull(it) }
             val rect = activeMedia?.let { thumbnailPositions[it.id] }
 
             // 悬浮底部 Tab — 相机 / 聊天 / 模型中心（纯图标）
@@ -716,13 +743,17 @@ fun GalleryScreen(
             ) {
                 if (selectedMediaIndex != null) {
                     MediaPager(
-                        assets = allFlatMedia,
+                        assets = previewMediaList,
                         initialIndex = selectedMediaIndex!!,
                         onClose = { selectedMediaIndex = null },
                         onDelete = { asset ->
                             viewModel.deleteMediaByIds(listOf(asset.id))
-                            val newAllFlat = allFlatMedia.filter { item -> item.id != asset.id }
-                            if (newAllFlat.isEmpty()) {
+                            // 搜索状态下同步更新搜索结果列表
+                            if (previewMediaList === searchResultMedia) {
+                                searchResultMedia = searchResultMedia.filter { it.id != asset.id }
+                            }
+                            val newPreview = previewMediaList.filter { it.id != asset.id }
+                            if (newPreview.isEmpty()) {
                                 selectedMediaIndex = null
                             }
                         },
