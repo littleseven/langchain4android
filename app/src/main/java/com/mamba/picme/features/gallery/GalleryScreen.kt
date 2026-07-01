@@ -56,6 +56,7 @@ import com.mamba.picme.core.common.Logger
 
 import com.mamba.picme.features.gallery.agent.rememberGalleryAgentIntegration
 import com.mamba.picme.features.gallery.components.EmptyGalleryMessage
+import com.mamba.picme.features.gallery.components.GallerySplashPlaceholder
 import com.mamba.picme.features.gallery.components.GalleryPermissionMessage
 import com.mamba.picme.features.gallery.components.GalleryTopBar
 import com.mamba.picme.features.gallery.components.MediaGrid
@@ -605,7 +606,7 @@ fun GalleryScreen(
                 }
 
                 allFlatMedia.isEmpty() -> {
-                    EmptyGalleryMessage()
+                    GallerySplashPlaceholder()
                 }
 
                 else -> {
