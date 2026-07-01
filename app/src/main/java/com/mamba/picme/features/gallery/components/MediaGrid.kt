@@ -207,7 +207,9 @@ fun MediaItem(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(asset.uri)
                 .size(360)
-                .crossfade(true)
+                // 关闭缩略图交叉淡入淡出：避免旧 Bitmap 在动画期间被回收/替换
+                // 导致 "Canvas: trying to use a recycled bitmap" 崩溃
+                .crossfade(false)
                 .build(),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
