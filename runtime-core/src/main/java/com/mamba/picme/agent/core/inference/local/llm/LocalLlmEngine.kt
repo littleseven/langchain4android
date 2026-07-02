@@ -390,7 +390,7 @@ class LocalLlmEngine(private val context: Context) : LlmChatLanguageModel, Strea
         bitmap: Bitmap,
         systemPrompt: String,
         userPrompt: String = "请描述这张图片",
-        maxTokens: Int = 128
+        maxTokens: Int = 256
     ): String = withContext(modelDispatcher) {
         engineMutex.withLock {
             if (!client.isLoaded) {

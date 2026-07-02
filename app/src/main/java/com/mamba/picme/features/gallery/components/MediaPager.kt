@@ -403,7 +403,7 @@ fun MediaPager(
                                         bitmap = bitmap,
                                         systemPrompt = "你是一个图像理解助手。请用简洁的中文描述这张图片的内容，包括主要对象、场景、颜色和氛围。",
                                         userPrompt = "请描述这张图片",
-                                        maxTokens = 128
+                                        maxTokens = 256
                                     )
                                 }
 
